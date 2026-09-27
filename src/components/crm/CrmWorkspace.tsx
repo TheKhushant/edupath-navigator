@@ -24,13 +24,12 @@ import {
   Settings,
   SlidersHorizontal,
   Sparkles,
-  UserRound,
   Users,
   X,
 } from "lucide-react";
 
 import { mockApplications, mockAssessment, mockCountries, mockCourses, mockDocuments, mockFollowUps, mockNotifications, mockPayments, mockStudents, mockUniversities, mockVisaCases, dashboardData } from "@/data/mockData";
-import type { ApplicationStatus, DocumentStatus, FollowUpStatus, PaymentStatus, Student, StudentStage, VisaStatus } from "@/types/crm";
+import type { Student } from "@/types/crm";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -38,8 +37,9 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 
 type ModuleKey = "dashboard" | "students" | "universities" | "courses" | "applications" | "documents" | "visa" | "payments" | "follow-ups" | "assessment" | "reports" | "settings";
+type IconComponent = typeof LayoutDashboard;
 
-const navigation: { label: string; to: string; key: ModuleKey; icon: typeof LayoutDashboard }[] = [
+const navigation: { label: string; to: string; key: ModuleKey; icon: IconComponent }[] = [
   { label: "Overview", to: "/", key: "dashboard", icon: LayoutDashboard },
   { label: "Students", to: "/students", key: "students", icon: Users },
   { label: "Universities", to: "/universities", key: "universities", icon: GraduationCap },
@@ -84,7 +84,7 @@ function Sidebar({ active, mobileOpen, onClose }: { active: ModuleKey; mobileOpe
   </>;
 }
 
-function PageHeader({ title, description, action, onAction }: { title: string; description: string; action?: string; onAction?: () => void }) {
+function PageHeader({ title, description, action, onAction }: { title: string; description: string; action?: string | undefined; onAction?: (() => void) | undefined }) {
   return <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><p className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-brand">SS Overseas CRM</p><h1 className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">{title}</h1><p className="mt-1 text-sm text-muted-foreground">{description}</p></div>{action && <Button onClick={onAction}><Plus />{action}</Button>}</div>;
 }
 
@@ -95,7 +95,7 @@ function EmptyState({ title, description }: { title: string; description: string
 function Dashboard({ onNavigate }: { onNavigate: (module: ModuleKey) => void }) {
   const statIcons = [Users, ClipboardCheck, FileCheck2, AlertCircle, GraduationCap, BriefcaseBusiness, CircleDollarSign, CalendarClock];
   return <div className="workspace-rise"><PageHeader title="Good morning, Manisha" description="A clear view of today’s student journeys and actions." action="Add student" onAction={() => onNavigate("students")} />
-    <div className="mb-6 grid grid-cols-2 gap-3 xl:grid-cols-4">{dashboardData.stats.map((stat, index) => { const Icon = statIcons[index]; return <Card key={stat.label} className="workspace-glass shadow-none"><CardContent className="p-4"><div className="flex items-start justify-between"><div className="rounded-md bg-secondary p-2 text-brand"><Icon className="h-4 w-4" /></div><ArrowUpRight className="h-4 w-4 text-muted-foreground" /></div><p className="mt-4 text-2xl font-semibold tracking-tight">{stat.value}</p><p className="mt-1 text-xs font-medium text-muted-foreground">{stat.label}</p><p className="mt-2 text-[11px] text-muted-foreground">{stat.detail}</p></CardContent></Card>; })}</div>
+    <div className="mb-6 grid grid-cols-2 gap-3 xl:grid-cols-4">{dashboardData.stats.map((stat, index) => { const Icon = statIcons[index] ?? BarChart3; return <Card key={stat.label} className="workspace-glass shadow-none"><CardContent className="p-4"><div className="flex items-start justify-between"><div className="rounded-md bg-secondary p-2 text-brand"><Icon className="h-4 w-4" /></div><ArrowUpRight className="h-4 w-4 text-muted-foreground" /></div><p className="mt-4 text-2xl font-semibold tracking-tight">{stat.value}</p><p className="mt-1 text-xs font-medium text-muted-foreground">{stat.label}</p><p className="mt-2 text-[11px] text-muted-foreground">{stat.detail}</p></CardContent></Card>; })}</div>
     <div className="grid gap-5 xl:grid-cols-[1.4fr_1fr]">
       <Card className="workspace-glass shadow-none"><CardHeader className="flex-row items-center justify-between pb-3"><div><CardTitle className="text-base">Application pipeline</CardTitle><p className="mt-1 text-xs text-muted-foreground">Students moving through the journey</p></div><Button variant="ghost" size="sm" onClick={() => onNavigate("applications")}>View applications <ChevronRight /></Button></CardHeader><CardContent><div className="space-y-4">{dashboardData.pipeline.map((stage, index) => <div key={stage.label}><div className="mb-1.5 flex items-center justify-between text-xs"><span className="font-medium">{stage.label}</span><span className="text-muted-foreground">{stage.count}</span></div><div className="h-2 rounded-full bg-secondary"><div className={`h-full rounded-full ${stage.state === "active" ? "bg-primary" : stage.state === "complete" ? "bg-success" : "bg-info/50"}`} style={{ width: `${Math.max(18, 100 - index * 13)}%` }} /></div></div>)}</div></CardContent></Card>
       <Card className="workspace-glass shadow-none"><CardHeader className="flex-row items-center justify-between pb-3"><div><CardTitle className="text-base">Upcoming deadlines</CardTitle><p className="mt-1 text-xs text-muted-foreground">The next actions needing attention</p></div><Button variant="ghost" size="icon" onClick={() => onNavigate("applications")}><ArrowUpRight /></Button></CardHeader><CardContent className="space-y-3">{dashboardData.deadlines.map((item) => <div key={item.title} className="flex gap-3 rounded-lg border border-line/60 bg-background/50 p-3"><div className={`flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-md ${item.tone === "danger" ? "bg-danger/15 text-danger-foreground" : item.tone === "warning" ? "bg-warning/20 text-warning-foreground" : "bg-info/15 text-info-foreground"}`}><span className="text-base font-semibold leading-none">{item.date}</span><span className="mt-1 text-[9px] font-semibold">{item.month}</span></div><div className="min-w-0"><p className="truncate text-sm font-medium">{item.title}</p><p className="mt-1 truncate text-xs text-muted-foreground">{item.detail}</p></div></div>)}</CardContent></Card>
