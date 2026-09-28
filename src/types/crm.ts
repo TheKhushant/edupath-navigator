@@ -78,12 +78,31 @@ export type LivingCostPeriod =
 export type MatchStatus =
   | "Matching"
   | "Review Required"
-  | "Not Suitable";
+  | "Meets Published Requirements"
+  | "Requirement Review Needed";
 
 export type MatchAction =
   | "Shortlist"
   | "Review"
-  | "Exclude";
+  | "Review credits"
+  | "Verify";
+
+  export type AssessmentMatchStatus =
+  | "Meets Published Requirements"
+  | "Requirement Review Needed";
+
+  export type AssessmentMatchAction =
+    | "Review credits"
+    | "Shortlist"
+    | "Verify";
+
+  export interface AssessmentMatch {
+    university: string;
+    course: string;
+    status: AssessmentMatchStatus;
+    issue: string;
+    action: AssessmentMatchAction;
+  }
 
 /* =========================================================
    STUDENT
@@ -161,73 +180,44 @@ export interface University {
 
 export interface UniversityCourse {
   id: string;
-
   universityId: string;
 
-  /*
-   * Example:
-   *
-   * Computer Science
-   * Informatics
-   * Computing
-   * Computer Engineering
-   */
   courseName: string;
-
-  /*
-   * Common/canonical course name.
-   *
-   * Example:
-   * Computer Science
-   */
   canonicalCourse: string;
-
-  /*
-   * Other names under which this course
-   * may be offered.
-   */
   aliases: string[];
 
   degree: string;
   specialization: string;
 
   duration: string;
-
   language: string;
 
-  /* Tuition */
   tuitionMin: number;
   tuitionMax: number;
   tuitionCurrency: string;
   tuitionPeriod: TuitionPeriod;
 
-  /* Academic eligibility */
   requiredDegree: string;
   minimumGpa: string;
 
-  /* Language requirements */
-  ielts: string;
-  toefl: string;
-  gre: string;
+  ielts?: string;
+  toefl?: string;
+  gre?: string;
 
-  /* Admission requirements */
   eligibility: string;
+
   entranceExam: string;
   interview: string;
 
-  /* Admission difficulty */
   difficulty: UniversityDifficulty;
 
-  /* Intake */
   intake: string;
 
   applicationStartDate: string;
   applicationDeadline: string;
 
-  /* Verification */
   lastVerified: string;
   sourceUrl: string;
-
   notes: string;
 }
 
@@ -261,6 +251,19 @@ export interface Country {
   sourceUrl: string;
 }
 
+export interface Course {
+  id: string;
+  name: string;
+  degree: string;
+  specialization: string;
+  country: string;
+  duration: string;
+  language: string;
+  requirements: string;
+  notes: string;
+  status: string;
+}
+
 /* =========================================================
    UNIVERSITY MATCH
 ========================================================= */
@@ -274,7 +277,6 @@ export interface UniversityMatch {
 
   courseId: string;
   course: string;
-
   canonicalCourse: string;
 
   difficulty: UniversityDifficulty;
@@ -287,23 +289,19 @@ export interface UniversityMatch {
   livingCostMin: number;
   livingCostMax: number;
   livingCostCurrency: string;
-  livingCostPeriod: LivingCostPeriod;
+  livingCostPeriod: string;
 
   intake: string;
-
   applicationStartDate: string;
   applicationDeadline: string;
 
   lastVerified: string;
 
   matchedCriteria: string[];
-
   warnings: string[];
-
   missingRequirements: string[];
 
   status: MatchStatus;
-
   action: MatchAction;
 }
 
@@ -452,5 +450,5 @@ export interface AssessmentResult {
 
   courses: string[];
 
-  matches: UniversityMatch[];
+  matches: AssessmentMatch[];
 }

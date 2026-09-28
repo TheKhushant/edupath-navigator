@@ -1,6 +1,5 @@
 import {
   mockCountries,
-  mockStudents,
   mockUniversities,
   mockUniversityCourses,
 } from "@/data/mockData";
@@ -21,12 +20,16 @@ export const matchUniversities = (
 
   const preferredCountries =
     student.preferredCountries.map((country) =>
-      country.toLowerCase()
+      country.toLowerCase().trim()
     );
 
   const studentCourse =
-    `${student.desiredCourse} ${student.specialization}`
-      .toLowerCase();
+    `${student.desiredCourse ?? ""} ${
+      student.specialization ?? ""
+    }`.toLowerCase();
+
+  const studentSpecialization =
+    student.specialization?.trim().toLowerCase() ?? "";
 
   for (const universityCourse of mockUniversityCourses) {
     const university = mockUniversities.find(
@@ -36,7 +39,9 @@ export const matchUniversities = (
     if (!university) continue;
 
     const country = mockCountries.find(
-      (item) => item.country.toLowerCase() === university.country.toLowerCase()
+      (item) =>
+        item.country.toLowerCase() ===
+        university.country.toLowerCase()
     );
 
     if (!country) continue;
@@ -44,6 +49,10 @@ export const matchUniversities = (
     const matchedCriteria: string[] = [];
     const warnings: string[] = [];
     const missingRequirements: string[] = [];
+
+    // -----------------------------------
+    // COUNTRY MATCH
+    // -----------------------------------
 
     const countryMatched = preferredCountries.includes(
       university.country.toLowerCase()
@@ -53,45 +62,98 @@ export const matchUniversities = (
       matchedCriteria.push("Preferred country");
     }
 
+    // -----------------------------------
+    // COURSE MATCH
+    // -----------------------------------
+
     const courseMatched =
       studentCourse.includes(
         universityCourse.canonicalCourse.toLowerCase()
       ) ||
-      universityCourse.aliases.some((alias) =>
+      universityCourse.aliases.some((alias: string) =>
         studentCourse.includes(alias.toLowerCase())
       ) ||
-      universityCourse.specialization
-        .toLowerCase()
-        .includes(student.specialization.toLowerCase());
+      (
+        studentSpecialization.length > 0 &&
+        universityCourse.specialization
+          .toLowerCase()
+          .includes(studentSpecialization)
+      );
 
     if (courseMatched) {
       matchedCriteria.push("Course / specialization");
     }
 
-    if (student.ielts && universityCourse.ielts) {
-      matchedCriteria.push("English language requirement available");
+    // -----------------------------------
+    // IELTS
+    // -----------------------------------
+
+    if (
+      student.ielts &&
+      universityCourse.ielts
+    ) {
+      matchedCriteria.push(
+        "English language requirement available"
+      );
     }
+
+    // -----------------------------------
+    // ACADEMIC
+    // -----------------------------------
 
     if (student.cgpa) {
-      matchedCriteria.push("Academic profile available for review");
+      matchedCriteria.push(
+        "Academic profile available for review"
+      );
     }
+
+    // -----------------------------------
+    // BUDGET
+    // -----------------------------------
 
     if (studentBudget > 0) {
-      matchedCriteria.push("Budget available for comparison");
+      matchedCriteria.push(
+        "Budget available for comparison"
+      );
     }
 
+    // -----------------------------------
+    // WARNINGS
+    // -----------------------------------
+
     if (!countryMatched) {
-      warnings.push("Country is outside student's preferred countries");
+      warnings.push(
+        "Country is outside student's preferred countries"
+      );
     }
 
     if (!courseMatched) {
-      warnings.push("Course match needs counsellor review");
+      warnings.push(
+        "Course match needs counsellor review"
+      );
     }
 
-    const status =
+    // -----------------------------------
+    // STATUS
+    // -----------------------------------
+
+    const status: UniversityMatch["status"] =
       courseMatched && countryMatched
         ? "Matching"
         : "Review Required";
+
+    // -----------------------------------
+    // ACTION
+    // -----------------------------------
+
+    const action: UniversityMatch["action"] =
+      status === "Matching"
+        ? "Shortlist"
+        : "Review";
+
+    // -----------------------------------
+    // RESULT
+    // -----------------------------------
 
     results.push({
       universityId: university.id,
@@ -153,10 +215,7 @@ export const matchUniversities = (
 
       status,
 
-      action:
-        status === "Matching"
-          ? "Shortlist"
-          : "Review",
+      action,
     });
   }
 
