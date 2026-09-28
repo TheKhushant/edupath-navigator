@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import {
   AlertCircle,
   ArrowUpRight,
@@ -15,6 +15,7 @@ import {
   ClipboardList,
   FileCheck2,
   FileText,
+  GitBranch,
   GraduationCap,
   LayoutDashboard,
   Menu,
@@ -29,14 +30,15 @@ import {
 } from "lucide-react";
 
 import { mockApplications, mockAssessment, mockCountries, mockCourses, mockDocuments, mockFollowUps, mockNotifications, mockPayments, mockStudents, mockUniversities, mockVisaCases, dashboardData } from "@/data/mockData";
-import type { Student } from "@/types/crm";
+import { pipelineDefinitions } from "@/data/pipelineData";
+import type { ServiceType, Student } from "@/types/crm";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 
-type ModuleKey = "dashboard" | "students" | "universities" | "courses" | "applications" | "documents" | "visa" | "payments" | "follow-ups" | "assessment" | "reports" | "settings";
+type ModuleKey = "dashboard" | "students" | "universities" | "courses" | "applications" | "documents" | "visa" | "payments" | "follow-ups" | "pipelines" | "assessment" | "reports" | "settings";
 type IconComponent = typeof LayoutDashboard;
 
 const navigation: { label: string; to: string; key: ModuleKey; icon: IconComponent }[] = [
@@ -49,6 +51,7 @@ const navigation: { label: string; to: string; key: ModuleKey; icon: IconCompone
   { label: "Visa cases", to: "/visa", key: "visa", icon: BriefcaseBusiness },
   { label: "Payments", to: "/payments", key: "payments", icon: CircleDollarSign },
   { label: "Follow-ups", to: "/follow-ups", key: "follow-ups", icon: CalendarClock },
+  { label: "Pipelines", to: "/pipelines", key: "pipelines", icon: GitBranch },
   { label: "Assessment", to: "/assessment", key: "assessment", icon: ClipboardCheck },
   { label: "Reports", to: "/reports", key: "reports", icon: BarChart3 },
 ];
@@ -118,7 +121,16 @@ function StudentsModule() {
   </div>;
 }
 
-function RecordsModule({ module }: { module: Exclude<ModuleKey, "dashboard" | "students" | "settings"> }) {
+function PipelinesModule() {
+  const services = Object.keys(pipelineDefinitions) as ServiceType[];
+  const [service, setService] = useState<ServiceType>(services[0] ?? "Study Abroad");
+  const definition = pipelineDefinitions[service];
+  const serviceStudents = mockStudents.filter((student) => student.service === service);
+
+  return <div className="workspace-rise"><PageHeader title="Service pipelines" description="See every student journey by service and current stage." /><div className="mb-5 flex flex-wrap gap-2">{services.map((item) => <Button key={item} variant={service === item ? "default" : "outline"} size="sm" onClick={() => setService(item)}>{pipelineDefinitions[item].label}</Button>)}</div><div className="overflow-x-auto pb-3"><div className="flex min-w-[980px] gap-3">{definition.stages.map((stage, index) => { const cards = serviceStudents.filter((student) => student.stage === stage || (index === 0 && !definition.stages.includes(student.stage))); return <div key={stage} className="w-48 shrink-0 rounded-lg border border-line/60 bg-secondary/35 p-3"><div className="mb-3 flex items-center justify-between gap-2"><p className="text-xs font-semibold">{stage}</p><span className="text-[11px] text-muted-foreground">{cards.length}</span></div><div className="space-y-2">{cards.map((student) => <div key={student.id} className="rounded-md border border-line/60 bg-card p-3 shadow-sm"><p className="text-sm font-medium">{student.name}</p><p className="mt-1 truncate text-[11px] text-muted-foreground">{student.desiredCourse} · {student.city}</p><p className="mt-2 text-[10px] text-muted-foreground">{student.counsellor}</p></div>)}{cards.length === 0 && <p className="py-4 text-center text-[11px] text-muted-foreground">No students</p>}</div></div>; })}</div></div></div>;
+}
+
+function RecordsModule({ module }: { module: Exclude<ModuleKey, "dashboard" | "students" | "pipelines" | "settings"> }) {
   const [search, setSearch] = useState(""); const [filter, setFilter] = useState("All");
   const config = {
     universities: { title: "Universities", description: "Compare verified institutions and programme requirements.", action: "Add university", filters: mockUniversities.map((item) => item.country) },
@@ -152,7 +164,23 @@ function SettingsModule() {
 }
 
 export function CrmWorkspace({ module }: { module: ModuleKey }) {
+  const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false); const [notificationsOpen, setNotificationsOpen] = useState(false);
   const currentTitle = navigation.find((item) => item.key === module)?.label ?? (module === "settings" ? "Settings" : "Overview");
-  return <div className="min-h-screen bg-canvas"><Sidebar active={module} mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} /><div className="min-h-screen md:pl-64"><header className="sticky top-0 z-30 border-b border-line/60 bg-canvas/85 backdrop-blur-xl"><div className="flex h-16 items-center gap-3 px-4 sm:px-6 lg:px-8"><Button variant="ghost" size="icon" className="md:hidden" onClick={() => setMobileOpen(true)}><Menu /></Button><div className="flex items-center gap-2 text-sm"><span className="hidden text-muted-foreground sm:inline">Workspace</span><ChevronRight className="hidden h-4 w-4 text-muted-foreground sm:inline" /><span className="font-medium">{currentTitle}</span></div><div className="ml-auto flex items-center gap-2"><div className="relative hidden w-52 lg:block"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input placeholder="Search workspace" className="h-8 border-transparent bg-secondary/70 pl-9 text-xs" /></div><Button variant="ghost" size="icon" className="relative" onClick={() => setNotificationsOpen((open) => !open)}><Bell /><span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-danger" /></Button><div className="hidden h-8 w-8 items-center justify-center rounded-full bg-brand/15 text-xs font-semibold text-brand sm:flex">MR</div></div></div>{notificationsOpen && <div className="absolute right-4 top-14 z-40 w-[min(360px,calc(100vw-2rem))] rounded-lg border border-line bg-card p-4 shadow-lg"><div className="mb-3 flex items-center justify-between"><p className="font-semibold">Notifications</p><Button variant="ghost" size="sm" onClick={() => setNotificationsOpen(false)}>Mark read</Button></div><div className="space-y-3">{mockNotifications.slice(0, 4).map((notice) => <div key={notice.id} className="flex gap-3"><div className={`mt-1 h-2 w-2 rounded-full ${notice.tone === "warning" ? "bg-warning" : notice.tone === "success" ? "bg-success" : "bg-info"}`} /><div><p className="text-sm font-medium">{notice.title}</p><p className="text-xs text-muted-foreground">{notice.description}</p><p className="mt-1 text-[10px] text-muted-foreground">{notice.time}</p></div></div>)}</div></div>}</header><main className="mx-auto max-w-[1500px] p-4 sm:p-6 lg:p-8">{module === "dashboard" ? <Dashboard onNavigate={(next) => { window.history.pushState({}, "", next === "dashboard" ? "/" : `/${next}`); window.dispatchEvent(new PopStateEvent("popstate")); }} /> : module === "students" ? <StudentsModule /> : module === "settings" ? <SettingsModule /> : <RecordsModule module={module} />}</main><nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line/60 bg-card/95 p-1 backdrop-blur-xl md:hidden">{compactNavigation.map(({ label, to, key, icon: Icon }) => <Link key={key} to={to} activeProps={{ className: "bg-primary text-primary-foreground" }} className="flex flex-col items-center gap-1 rounded-md px-1 py-2 text-[10px] font-medium text-muted-foreground"><Icon className="h-4 w-4" /><span>{label}</span></Link>)}</nav></div></div>;
+  const navigateToModule = (next: ModuleKey) => {
+    if (next === "dashboard") return navigate({ to: "/" });
+    if (next === "students") return navigate({ to: "/students" });
+    if (next === "universities") return navigate({ to: "/universities" });
+    if (next === "courses") return navigate({ to: "/courses" });
+    if (next === "applications") return navigate({ to: "/applications" });
+    if (next === "documents") return navigate({ to: "/documents" });
+    if (next === "visa") return navigate({ to: "/visa" });
+    if (next === "payments") return navigate({ to: "/payments" });
+    if (next === "follow-ups") return navigate({ to: "/follow-ups" });
+    if (next === "pipelines") return navigate({ to: "/pipelines" });
+    if (next === "assessment") return navigate({ to: "/assessment" });
+    if (next === "reports") return navigate({ to: "/reports" });
+    return navigate({ to: "/settings" });
+  };
+  return <div className="min-h-screen bg-canvas"><Sidebar active={module} mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} /><div className="min-h-screen md:pl-64"><header className="sticky top-0 z-30 border-b border-line/60 bg-canvas/85 backdrop-blur-xl"><div className="flex h-16 items-center gap-3 px-4 sm:px-6 lg:px-8"><Button variant="ghost" size="icon" aria-label="Open navigation" className="md:hidden" onClick={() => setMobileOpen(true)}><Menu /></Button><div className="flex items-center gap-2 text-sm"><span className="hidden text-muted-foreground sm:inline">Workspace</span><ChevronRight className="hidden h-4 w-4 text-muted-foreground sm:inline" /><span className="font-medium">{currentTitle}</span></div><div className="ml-auto flex items-center gap-2"><div className="relative hidden w-52 lg:block"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input placeholder="Search workspace" className="h-8 border-transparent bg-secondary/70 pl-9 text-xs" /></div><Button variant="ghost" size="icon" aria-label="Open notifications" className="relative" onClick={() => setNotificationsOpen((open) => !open)}><Bell /><span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-danger" /></Button><div className="hidden h-8 w-8 items-center justify-center rounded-full bg-brand/15 text-xs font-semibold text-brand sm:flex">MR</div></div></div>{notificationsOpen && <div className="absolute right-4 top-14 z-40 w-[min(360px,calc(100vw-2rem))] rounded-lg border border-line bg-card p-4 shadow-lg"><div className="mb-3 flex items-center justify-between"><p className="font-semibold">Notifications</p><Button variant="ghost" size="sm" onClick={() => setNotificationsOpen(false)}>Mark read</Button></div><div className="space-y-3">{mockNotifications.slice(0, 4).map((notice) => <div key={notice.id} className="flex gap-3"><div className={`mt-1 h-2 w-2 rounded-full ${notice.tone === "warning" ? "bg-warning" : notice.tone === "success" ? "bg-success" : "bg-info"}`} /><div><p className="text-sm font-medium">{notice.title}</p><p className="text-xs text-muted-foreground">{notice.description}</p><p className="mt-1 text-[10px] text-muted-foreground">{notice.time}</p></div></div>)}</div></div>}</header><main className="mx-auto max-w-[1500px] p-4 sm:p-6 lg:p-8">{module === "dashboard" ? <Dashboard onNavigate={navigateToModule} /> : module === "students" ? <StudentsModule /> : module === "pipelines" ? <PipelinesModule /> : module === "settings" ? <SettingsModule /> : <RecordsModule module={module} />}</main><nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line/60 bg-card/95 p-1 backdrop-blur-xl md:hidden">{compactNavigation.map(({ label, to, key, icon: Icon }) => <Link key={key} to={to} activeProps={{ className: "bg-primary text-primary-foreground" }} className="flex flex-col items-center gap-1 rounded-md px-1 py-2 text-[10px] font-medium text-muted-foreground"><Icon className="h-4 w-4" /><span>{label}</span></Link>)}</nav></div></div>;
 }

@@ -16,6 +16,7 @@ import { Route as CoursesRouteImport } from './routes/courses'
 import { Route as DocumentsRouteImport } from './routes/documents'
 import { Route as FollowUpsRouteImport } from './routes/follow-ups'
 import { Route as PaymentsRouteImport } from './routes/payments'
+import { Route as PipelinesRouteImport } from './routes/pipelines'
 import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as StudentsRouteImport } from './routes/students'
@@ -57,6 +58,11 @@ const PaymentsRoute = PaymentsRouteImport.update({
   path: '/payments',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PipelinesRoute = PipelinesRouteImport.update({
+  id: '/pipelines',
+  path: '/pipelines',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ReportsRoute = ReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
@@ -91,6 +97,7 @@ export interface FileRoutesByFullPath {
   '/documents': typeof DocumentsRoute
   '/follow-ups': typeof FollowUpsRoute
   '/payments': typeof PaymentsRoute
+  '/pipelines': typeof PipelinesRoute
   '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRoute
   '/students': typeof StudentsRoute
@@ -105,6 +112,7 @@ export interface FileRoutesByTo {
   '/documents': typeof DocumentsRoute
   '/follow-ups': typeof FollowUpsRoute
   '/payments': typeof PaymentsRoute
+  '/pipelines': typeof PipelinesRoute
   '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRoute
   '/students': typeof StudentsRoute
@@ -120,6 +128,7 @@ export interface FileRoutesById {
   '/documents': typeof DocumentsRoute
   '/follow-ups': typeof FollowUpsRoute
   '/payments': typeof PaymentsRoute
+  '/pipelines': typeof PipelinesRoute
   '/reports': typeof ReportsRoute
   '/settings': typeof SettingsRoute
   '/students': typeof StudentsRoute
@@ -136,6 +145,7 @@ export interface FileRouteTypes {
     | '/documents'
     | '/follow-ups'
     | '/payments'
+    | '/pipelines'
     | '/reports'
     | '/settings'
     | '/students'
@@ -150,6 +160,7 @@ export interface FileRouteTypes {
     | '/documents'
     | '/follow-ups'
     | '/payments'
+    | '/pipelines'
     | '/reports'
     | '/settings'
     | '/students'
@@ -164,6 +175,7 @@ export interface FileRouteTypes {
     | '/documents'
     | '/follow-ups'
     | '/payments'
+    | '/pipelines'
     | '/reports'
     | '/settings'
     | '/students'
@@ -179,6 +191,7 @@ export interface RootRouteChildren {
   DocumentsRoute: typeof DocumentsRoute
   FollowUpsRoute: typeof FollowUpsRoute
   PaymentsRoute: typeof PaymentsRoute
+  PipelinesRoute: typeof PipelinesRoute
   ReportsRoute: typeof ReportsRoute
   SettingsRoute: typeof SettingsRoute
   StudentsRoute: typeof StudentsRoute
@@ -237,6 +250,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PaymentsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/pipelines': {
+      id: '/pipelines'
+      path: '/pipelines'
+      fullPath: '/pipelines'
+      preLoaderRoute: typeof PipelinesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/reports': {
       id: '/reports'
       path: '/reports'
@@ -283,6 +303,7 @@ const rootRouteChildren: RootRouteChildren = {
   DocumentsRoute: DocumentsRoute,
   FollowUpsRoute: FollowUpsRoute,
   PaymentsRoute: PaymentsRoute,
+  PipelinesRoute: PipelinesRoute,
   ReportsRoute: ReportsRoute,
   SettingsRoute: SettingsRoute,
   StudentsRoute: StudentsRoute,
