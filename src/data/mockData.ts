@@ -18,11 +18,352 @@ export const mockStudents: Student[] = [
 ];
 
 export const mockUniversities: University[] = [
-  { id: "UNI-001", name: "Sophia University", country: "Japan", city: "Tokyo", course: "MS Computer Science", specialization: "AI & Data Science", language: "English", tuition: "¥1,400,000 / year", intake: "April 2027", deadline: "21 Jan 2026", applicationFee: "¥35,000", eligibility: "Relevant bachelor's degree with strong quantitative subjects.", requiredDegree: "B.Tech / B.E. / BCA", minimumGpa: "7.5 / 10", ielts: "6.5", toefl: "80", gre: "Not required", entranceExam: "No", interview: "Yes", livingCost: "¥100,000 / month", scholarship: "University merit scholarship", financialProof: "¥2,000,000", partTime: "Up to 28 hours/week", postStudyWork: "Designated activities visa", documents: ["Transcript", "CV", "SOP", "LOR"], sop: "Required", lor: "2 academic", aps: "Not required", website: "https://www.sophia.ac.jp", portal: "Online application portal", lastVerified: "12 Jan 2026", sourceUrl: "University admissions page", notes: "Strong fit for AI and embedded profiles." },
-  { id: "UNI-002", name: "TU Munich", country: "Germany", city: "Munich", course: "MSc Informatics", specialization: "Computer Science", language: "English", tuition: "€0 + semester contribution", intake: "October 2026", deadline: "15 Jan 2026", applicationFee: "€75", eligibility: "Subject-specific aptitude assessment and relevant credits.", requiredDegree: "B.Tech / B.E. / BSc CS", minimumGpa: "8.0 / 10", ielts: "6.5", toefl: "88", gre: "Optional", entranceExam: "Aptitude assessment", interview: "Possible", livingCost: "€1,200 / month", scholarship: "DAAD options", financialProof: "€11,904 blocked account", partTime: "Up to 20 hours/week", postStudyWork: "18-month job search permit", documents: ["Transcript", "CV", "SOP", "LOR", "APS"], sop: "Required", lor: "2 academic", aps: "Required", website: "https://www.tum.de", portal: "TUMonline", lastVerified: "09 Jan 2026", sourceUrl: "TUM program page", notes: "APS and ECTS mapping should be reviewed." },
-  { id: "UNI-003", name: "Delft University of Technology", country: "Netherlands", city: "Delft", course: "MSc Computer Science", specialization: "Data Science & Technology", language: "English", tuition: "€20,560 / year", intake: "September 2026", deadline: "01 Feb 2026", applicationFee: "€100", eligibility: "Relevant degree with programming, math and algorithms.", requiredDegree: "B.Tech / B.E. / BSc CS", minimumGpa: "8.0 / 10", ielts: "7.0", toefl: "100", gre: "Not required", entranceExam: "No", interview: "No", livingCost: "€1,100 / month", scholarship: "TU Delft excellence", financialProof: "€14,000", partTime: "Limited student work", postStudyWork: "Orientation year permit", documents: ["Transcript", "CV", "SOP", "LOR", "Portfolio"], sop: "Required", lor: "2 academic", aps: "Not required", website: "https://www.tudelft.nl", portal: "Osiris", lastVerified: "14 Jan 2026", sourceUrl: "TU Delft admissions page", notes: "High academic bar; review prerequisite credits." },
-  { id: "UNI-004", name: "National Taiwan University", country: "Taiwan", city: "Taipei", course: "MS Electrical Engineering", specialization: "VLSI & Embedded Systems", language: "English", tuition: "NT$64,000 / semester", intake: "September 2026", deadline: "10 Mar 2026", applicationFee: "NT$1,600", eligibility: "Electrical or electronics degree with circuit fundamentals.", requiredDegree: "B.E. E&TC / EE", minimumGpa: "7.0 / 10", ielts: "6.5", toefl: "79", gre: "Not required", entranceExam: "Department review", interview: "Possible", livingCost: "NT$20,000 / month", scholarship: "MOE scholarship", financialProof: "NT$200,000", partTime: "University dependent", postStudyWork: "Work permit pathway", documents: ["Transcript", "CV", "SOP", "LOR"], sop: "Required", lor: "2 academic", aps: "Not required", website: "https://www.ntu.edu.tw", portal: "Online portal", lastVerified: "08 Jan 2026", sourceUrl: "NTU international admissions", notes: "Good option for Rahul's specialization." },
-  { id: "UNI-005", name: "Politecnico di Milano", country: "Italy", city: "Milan", course: "MSc Digital and Interaction Design", specialization: "Interaction Design", language: "English", tuition: "€3,900–€4,500 / year", intake: "September 2026", deadline: "25 Feb 2026", applicationFee: "€50", eligibility: "Relevant undergraduate degree and portfolio.", requiredDegree: "B.Des / BFA / related degree", minimumGpa: "7.0 / 10", ielts: "6.5", toefl: "80", gre: "Not required", entranceExam: "Portfolio review", interview: "No", livingCost: "€900 / month", scholarship: "DSU regional scholarship", financialProof: "€7,000", partTime: "Up to 20 hours/week", postStudyWork: "Post-study permit options", documents: ["Transcript", "CV", "Portfolio", "SOP"], sop: "Required", lor: "1 academic", aps: "Not required", website: "https://www.polimi.it", portal: "Online portal", lastVerified: "05 Jan 2026", sourceUrl: "Polimi programme page", notes: "Portfolio quality is the key review item." },
+  {
+    id: "UNI-001",
+    name: "Sophia University",
+    country: "Japan",
+    city: "Tokyo",
+
+    website: "https://www.sophia.ac.jp",
+    portal: "Online application portal",
+
+    applicationFee: "¥35,000",
+
+    scholarship: "University merit scholarship",
+    financialProof: "¥2,000,000",
+    partTime: "Up to 28 hours/week",
+    postStudyWork: "Designated activities visa",
+
+    documents: [
+      "Transcript",
+      "CV",
+      "SOP",
+      "LOR",
+    ],
+
+    sop: "Required",
+    lor: "2 academic",
+    aps: "Not required",
+
+    lastVerified: "28 Sep 2026",
+    sourceUrl: "University admissions page",
+
+    notes: "Verify programme-specific requirements before counselling.",
+  },
+
+  {
+    id: "UNI-002",
+    name: "TU Munich",
+    country: "Germany",
+    city: "Munich",
+
+    website: "https://www.tum.de",
+    portal: "TUMonline",
+
+    applicationFee: "€75",
+
+    scholarship: "DAAD options",
+    financialProof: "Blocked account requirement",
+    partTime: "Up to 20 hours/week",
+    postStudyWork: "18-month job search permit",
+
+    documents: [
+      "Transcript",
+      "CV",
+      "SOP",
+      "LOR",
+      "APS",
+    ],
+
+    sop: "Required",
+    lor: "2 academic",
+    aps: "Required",
+
+    lastVerified: "28 Sep 2026",
+    sourceUrl: "TUM programme page",
+
+    notes: "APS and subject-credit mapping should be reviewed.",
+  },
+
+  {
+    id: "UNI-003",
+    name: "Delft University of Technology",
+    country: "Netherlands",
+    city: "Delft",
+
+    website: "https://www.tudelft.nl",
+    portal: "Osiris",
+
+    applicationFee: "€100",
+
+    scholarship: "TU Delft excellence",
+    financialProof: "University financial requirement",
+    partTime: "Limited student work",
+    postStudyWork: "Orientation year permit",
+
+    documents: [
+      "Transcript",
+      "CV",
+      "SOP",
+      "LOR",
+      "Portfolio",
+    ],
+
+    sop: "Required",
+    lor: "2 academic",
+    aps: "Not required",
+
+    lastVerified: "28 Sep 2026",
+    sourceUrl: "TU Delft admissions page",
+
+    notes: "Review prerequisite credits.",
+  },
+
+  {
+    id: "UNI-004",
+    name: "National Taiwan University",
+    country: "Taiwan",
+    city: "Taipei",
+
+    website: "https://www.ntu.edu.tw",
+    portal: "Online portal",
+
+    applicationFee: "NT$1,600",
+
+    scholarship: "MOE scholarship",
+    financialProof: "Proof of funds",
+    partTime: "University dependent",
+    postStudyWork: "Work permit pathway",
+
+    documents: [
+      "Transcript",
+      "CV",
+      "SOP",
+      "LOR",
+    ],
+
+    sop: "Required",
+    lor: "2 academic",
+    aps: "Not required",
+
+    lastVerified: "28 Sep 2026",
+    sourceUrl: "NTU international admissions",
+
+    notes: "Check department-specific requirements.",
+  },
+];
+
+export const mockUniversityCourses: UniversityCourse[] = [
+  {
+    id: "UC-001",
+    universityId: "UNI-001",
+
+    courseName: "MS Computer Science",
+    canonicalCourse: "Computer Science",
+
+    aliases: [
+      "Computer Science",
+      "Computer Engineering",
+      "Computing",
+      "Software Engineering",
+    ],
+
+    degree: "Master's",
+    specialization: "AI & Data Science",
+
+    duration: "2 years",
+
+    language: "English",
+
+    tuitionMin: 1400000,
+    tuitionMax: 1400000,
+    tuitionCurrency: "JPY",
+    tuitionPeriod: "Year",
+
+    requiredDegree: "B.Tech / B.E. / BCA",
+    minimumGpa: "7.5 / 10",
+
+    ielts: "6.5",
+    toefl: "80",
+    gre: "Not required",
+
+    eligibility:
+      "Relevant bachelor's degree with strong quantitative subjects.",
+
+    entranceExam: "No",
+    interview: "Yes",
+
+    difficulty: "Medium",
+
+    intake: "April 2027",
+
+    applicationStartDate: "01 Sep 2026",
+    applicationDeadline: "21 Jan 2027",
+
+    lastVerified: "28 Sep 2026",
+
+    sourceUrl: "University admissions page",
+
+    notes: "Verify programme-specific requirements.",
+  },
+
+  {
+    id: "UC-002",
+    universityId: "UNI-002",
+
+    courseName: "MSc Informatics",
+    canonicalCourse: "Computer Science",
+
+    aliases: [
+      "Computer Science",
+      "Informatics",
+      "Computing",
+      "Computer Engineering",
+    ],
+
+    degree: "Master's",
+    specialization: "Computer Science",
+
+    duration: "2 years",
+
+    language: "English",
+
+    tuitionMin: 0,
+    tuitionMax: 0,
+    tuitionCurrency: "EUR",
+    tuitionPeriod: "Year",
+
+    requiredDegree: "B.Tech / B.E. / BSc CS",
+    minimumGpa: "8.0 / 10",
+
+    ielts: "6.5",
+    toefl: "88",
+    gre: "Optional",
+
+    eligibility:
+      "Subject-specific aptitude assessment and relevant credits.",
+
+    entranceExam: "Aptitude assessment",
+    interview: "Possible",
+
+    difficulty: "Hard",
+
+    intake: "Winter 2027",
+
+    applicationStartDate: "01 Apr 2026",
+    applicationDeadline: "15 Jan 2027",
+
+    lastVerified: "28 Sep 2026",
+
+    sourceUrl: "TUM programme page",
+
+    notes: "APS and ECTS mapping should be reviewed.",
+  },
+
+  {
+    id: "UC-003",
+    universityId: "UNI-003",
+
+    courseName: "MSc Computer Science",
+    canonicalCourse: "Computer Science",
+
+    aliases: [
+      "Computer Science",
+      "Computing",
+      "Computer Engineering",
+    ],
+
+    degree: "Master's",
+    specialization: "Data Science & Technology",
+
+    duration: "2 years",
+
+    language: "English",
+
+    tuitionMin: 20560,
+    tuitionMax: 20560,
+    tuitionCurrency: "EUR",
+    tuitionPeriod: "Year",
+
+    requiredDegree: "B.Tech / B.E. / BSc CS",
+    minimumGpa: "8.0 / 10",
+
+    ielts: "7.0",
+    toefl: "100",
+    gre: "Not required",
+
+    eligibility:
+      "Relevant degree with programming, mathematics and algorithms.",
+
+    entranceExam: "No",
+    interview: "No",
+
+    difficulty: "Very Hard",
+
+    intake: "September 2027",
+
+    applicationStartDate: "01 Oct 2026",
+    applicationDeadline: "01 Feb 2027",
+
+    lastVerified: "28 Sep 2026",
+
+    sourceUrl: "TU Delft admissions page",
+
+    notes: "Review prerequisite credits.",
+  },
+
+  {
+    id: "UC-004",
+    universityId: "UNI-004",
+
+    courseName: "MS Electrical Engineering",
+    canonicalCourse: "VLSI & Embedded Systems",
+
+    aliases: [
+      "VLSI",
+      "Embedded Systems",
+      "Electrical Engineering",
+      "Electronics Engineering",
+    ],
+
+    degree: "Master's",
+    specialization: "VLSI & Embedded Systems",
+
+    duration: "2 years",
+
+    language: "English",
+
+    tuitionMin: 64000,
+    tuitionMax: 64000,
+    tuitionCurrency: "TWD",
+    tuitionPeriod: "Semester",
+
+    requiredDegree: "B.E. E&TC / EE",
+    minimumGpa: "7.0 / 10",
+
+    ielts: "6.5",
+    toefl: "79",
+    gre: "Not required",
+
+    eligibility:
+      "Electrical or electronics degree with circuit fundamentals.",
+
+    entranceExam: "Department review",
+    interview: "Possible",
+
+    difficulty: "Medium",
+
+    intake: "September 2027",
+
+    applicationStartDate: "01 Dec 2026",
+    applicationDeadline: "10 Mar 2027",
+
+    lastVerified: "28 Sep 2026",
+
+    sourceUrl: "NTU international admissions",
+
+    notes: "Department-specific review required.",
+  },
 ];
 
 export const mockApplications: Application[] = [
@@ -86,17 +427,194 @@ export const mockNotifications: Notification[] = [
 ];
 
 export const mockCourses: Course[] = [
-  { id: "CRS-001", name: "MS Computer Science", degree: "Master's", specialization: "AI & Data Science", country: "Japan", duration: "2 years", language: "English", requirements: "Relevant bachelor's, IELTS 6.5+", notes: "Strong demand across partner universities.", status: "Active" },
-  { id: "CRS-002", name: "MSc Informatics", degree: "Master's", specialization: "Computer Science", country: "Germany", duration: "2 years", language: "English", requirements: "Subject credits, APS, IELTS 6.5+", notes: "Public university pathway.", status: "Active" },
-  { id: "CRS-003", name: "Ausbildung Mechatronics", degree: "Vocational", specialization: "Mechatronics", country: "Germany", duration: "3 years", language: "German", requirements: "12th / Diploma, German B1", notes: "Employer matching required.", status: "Active" },
-  { id: "CRS-004", name: "MSc Interaction Design", degree: "Master's", specialization: "Interaction Design", country: "Italy", duration: "2 years", language: "English", requirements: "Design degree, portfolio, IELTS 6.5+", notes: "Portfolio-led review.", status: "Draft" },
+  {
+    id: "CRS-001",
+    name: "Computer Science",
+    degree: "Master's",
+    specialization: "Computer Science",
+    country: "Multiple",
+    duration: "2 years",
+    language: "English",
+    requirements: "Relevant bachelor's degree",
+    notes: "Includes Informatics, Computing and related programmes.",
+    status: "Active",
+  },
+
+  {
+    id: "CRS-002",
+    name: "VLSI & Embedded Systems",
+    degree: "Master's",
+    specialization: "VLSI & Embedded Systems",
+    country: "Multiple",
+    duration: "2 years",
+    language: "English",
+    requirements: "Relevant electronics/electrical background.",
+    notes: "Includes VLSI, Embedded Systems and related programmes.",
+    status: "Active",
+  },
+
+  {
+    id: "CRS-003",
+    name: "Interaction Design",
+    degree: "Master's",
+    specialization: "Interaction Design",
+    country: "Multiple",
+    duration: "2 years",
+    language: "English",
+    requirements: "Relevant design background and portfolio where required.",
+    notes: "Includes interaction and digital design programmes.",
+    status: "Active",
+  },
+
+  {
+    id: "CRS-004",
+    name: "Mechatronics",
+    degree: "Vocational",
+    specialization: "Mechatronics",
+    country: "Germany",
+    duration: "3 years",
+    language: "German",
+    requirements: "12th / Diploma and required German level.",
+    notes: "Employer/programme-specific requirements apply.",
+    status: "Active",
+  },
 ];
 
 export const mockCountries: Country[] = [
-  { id: "CTY-001", country: "Germany", languageRequirements: "IELTS 6.5+ for English programmes; German A1–B1 for Ausbildung.", academicRequirements: "Subject-specific credits, APS for Indian applicants.", financialRequirements: "Blocked account around €11,904 for student visa.", visaRequirements: "Admission letter, insurance, financial proof, biometrics.", applicationProcess: "University portal or Uni-Assist, then visa appointment.", postStudy: "18-month job search permit after graduation.", notes: "Verify state and programme-specific details.", lastVerified: "09 Jan 2026", sourceUrl: "German Missions in India" },
-  { id: "CTY-002", country: "Japan", languageRequirements: "English programme IELTS 6.5+; Japanese pathway commonly N5–N2.", academicRequirements: "Relevant degree and university-specific prerequisites.", financialRequirements: "Proof of tuition and living funds.", visaRequirements: "Certificate of Eligibility, admission, financial proof.", applicationProcess: "Direct university portal, COE, embassy visa.", postStudy: "Job-hunting or work status transition options.", notes: "April and October intakes vary by institution.", lastVerified: "12 Jan 2026", sourceUrl: "Study in Japan" },
-  { id: "CTY-003", country: "Netherlands", languageRequirements: "IELTS 7.0+ for research universities is common.", academicRequirements: "Relevant credits and strong academic match.", financialRequirements: "Tuition plus university-arranged living funds.", visaRequirements: "University sponsors MVV and residence permit.", applicationProcess: "Studielink followed by university portal.", postStudy: "Orientation year permit for graduates.", notes: "Deadlines can be early for selective programmes.", lastVerified: "14 Jan 2026", sourceUrl: "IND Netherlands" },
-  { id: "CTY-004", country: "Taiwan", languageRequirements: "English programmes commonly IELTS 6.5; Mandarin optional.", academicRequirements: "Relevant degree and departmental fit.", financialRequirements: "Proof of funds and tuition plan.", visaRequirements: "Admission, health certificate, financial proof.", applicationProcess: "University online application and visa filing.", postStudy: "Work permit pathway subject to employer.", notes: "Scholarship windows should be tracked separately.", lastVerified: "08 Jan 2026", sourceUrl: "Study in Taiwan" },
+  {
+    id: "CTY-001",
+    country: "Germany",
+
+    livingCostMin: 900,
+    livingCostMax: 1300,
+    livingCostCurrency: "EUR",
+    livingCostPeriod: "Month",
+
+    languageRequirements:
+      "IELTS 6.5+ for English programmes; German A1–B1 for Ausbildung.",
+
+    academicRequirements:
+      "Subject-specific credits and programme-specific academic requirements.",
+
+    financialRequirements:
+      "Financial proof required for student visa.",
+
+    visaRequirements:
+      "Admission letter, insurance, financial proof and biometrics.",
+
+    applicationProcess:
+      "University portal or Uni-Assist, followed by visa process.",
+
+    postStudy:
+      "Post-study job search options subject to applicable rules.",
+
+    notes: "Verify programme and state-specific requirements.",
+
+    lastVerified: "28 Sep 2026",
+    sourceUrl: "Official country/university source",
+  },
+
+  {
+    id: "CTY-002",
+    country: "Japan",
+
+    livingCostMin: 80000,
+    livingCostMax: 130000,
+    livingCostCurrency: "JPY",
+    livingCostPeriod: "Month",
+
+    languageRequirements:
+      "English programmes may require IELTS; Japanese pathways have Japanese-language requirements.",
+
+    academicRequirements:
+      "Relevant degree and university-specific prerequisites.",
+
+    financialRequirements:
+      "Proof of tuition and living funds.",
+
+    visaRequirements:
+      "Certificate of Eligibility, admission and financial proof.",
+
+    applicationProcess:
+      "Direct university application followed by COE and visa process.",
+
+    postStudy:
+      "Post-study work options depend on eligibility and status.",
+
+    notes:
+      "April and October intakes vary by institution.",
+
+    lastVerified: "28 Sep 2026",
+    sourceUrl: "Official country/university source",
+  },
+
+  {
+    id: "CTY-003",
+    country: "Netherlands",
+
+    livingCostMin: 900,
+    livingCostMax: 1400,
+    livingCostCurrency: "EUR",
+    livingCostPeriod: "Month",
+
+    languageRequirements:
+      "English-taught programmes commonly require IELTS or equivalent.",
+
+    academicRequirements:
+      "Relevant degree, credits and academic match.",
+
+    financialRequirements:
+      "Tuition plus required financial proof.",
+
+    visaRequirements:
+      "University-sponsored immigration/residence process.",
+
+    applicationProcess:
+      "Central/application portal followed by university process.",
+
+    postStudy:
+      "Orientation year options may be available to eligible graduates.",
+
+    notes:
+      "Deadlines can be early for selective programmes.",
+
+    lastVerified: "28 Sep 2026",
+    sourceUrl: "Official country/university source",
+  },
+
+  {
+    id: "CTY-004",
+    country: "Taiwan",
+
+    livingCostMin: 18000,
+    livingCostMax: 30000,
+    livingCostCurrency: "TWD",
+    livingCostPeriod: "Month",
+
+    languageRequirements:
+      "English programmes commonly require English proficiency.",
+
+    academicRequirements:
+      "Relevant degree and departmental fit.",
+
+    financialRequirements:
+      "Proof of funds and tuition plan.",
+
+    visaRequirements:
+      "Admission, health documentation and financial proof.",
+
+    applicationProcess:
+      "University online application followed by visa filing.",
+
+    postStudy:
+      "Work permit options subject to applicable requirements.",
+
+    notes:
+      "Scholarship windows should be tracked separately.",
+
+    lastVerified: "28 Sep 2026",
+    sourceUrl: "Official country/university source",
+  },
 ];
 
 export const dashboardData: DashboardData = {

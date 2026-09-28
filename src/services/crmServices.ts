@@ -1,9 +1,37 @@
 import { apiConfig } from "@/lib/api";
-import { dashboardData, mockApplications, mockAssessment, mockCountries, mockCourses, mockDocuments, mockFollowUps, mockNotifications, mockPayments, mockStudents, mockUniversities, mockVisaCases } from "@/data/mockData";
-import type { Application, AssessmentResult, Country, Course, DashboardData, DocumentRecord, FollowUp, Notification, Payment, Student, University, VisaCase } from "@/types/crm";
+import { dashboardData, mockApplications, mockAssessment, mockCountries, mockCourses, mockDocuments, mockFollowUps, mockNotifications, mockPayments, mockStudents, mockUniversities, mockVisaCases, mockUniversityCourses } from "@/data/mockData";
+import type {
+  Application,
+  AssessmentResult,
+  Country,
+  Course,
+  DashboardData,
+  DocumentRecord,
+  FollowUp,
+  Notification,
+  Payment,
+  Student,
+  University,
+  UniversityCourse,
+  VisaCase
+} from "@/types/crm";
 
 const clone = <T,>(value: T): T => structuredClone(value);
 const wait = async <T,>(value: T): Promise<T> => { await new Promise((resolve) => setTimeout(resolve, 120)); return clone(value); };
+
+export const universityCourseService = {
+  getUniversityCourses: async (): Promise<UniversityCourse[]> =>
+    wait(mockUniversityCourses),
+
+  getByUniversityId: async (
+    universityId: string
+  ): Promise<UniversityCourse[]> =>
+    wait(
+      mockUniversityCourses.filter(
+        (course) => course.universityId === universityId
+      )
+    ),
+};
 
 export const studentService = {
   getStudents: async (): Promise<Student[]> => apiConfig.useMockData ? wait(mockStudents) : (await import("@/lib/api")).apiRequest<Student[]>("/students"),

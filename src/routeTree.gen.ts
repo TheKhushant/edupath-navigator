@@ -21,6 +21,7 @@ import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as StudentsRouteImport } from './routes/students'
 import { Route as UniversitiesRouteImport } from './routes/universities'
+import { Route as UniversityMatcherRouteImport } from './routes/university-matcher'
 import { Route as VisaRouteImport } from './routes/visa'
 
 const IndexRoute = IndexRouteImport.update({
@@ -83,6 +84,11 @@ const UniversitiesRoute = UniversitiesRouteImport.update({
   path: '/universities',
   getParentRoute: () => rootRouteImport,
 } as any)
+const UniversityMatcherRoute = UniversityMatcherRouteImport.update({
+  id: '/university-matcher',
+  path: '/university-matcher',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const VisaRoute = VisaRouteImport.update({
   id: '/visa',
   path: '/visa',
@@ -102,6 +108,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRoute
   '/students': typeof StudentsRoute
   '/universities': typeof UniversitiesRoute
+  '/university-matcher': typeof UniversityMatcherRoute
   '/visa': typeof VisaRoute
 }
 export interface FileRoutesByTo {
@@ -117,6 +124,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/students': typeof StudentsRoute
   '/universities': typeof UniversitiesRoute
+  '/university-matcher': typeof UniversityMatcherRoute
   '/visa': typeof VisaRoute
 }
 export interface FileRoutesById {
@@ -133,6 +141,7 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/students': typeof StudentsRoute
   '/universities': typeof UniversitiesRoute
+  '/university-matcher': typeof UniversityMatcherRoute
   '/visa': typeof VisaRoute
 }
 export interface FileRouteTypes {
@@ -150,6 +159,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/students'
     | '/universities'
+    | '/university-matcher'
     | '/visa'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -165,6 +175,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/students'
     | '/universities'
+    | '/university-matcher'
     | '/visa'
   id:
     | '__root__'
@@ -180,6 +191,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/students'
     | '/universities'
+    | '/university-matcher'
     | '/visa'
   fileRoutesById: FileRoutesById
 }
@@ -196,6 +208,7 @@ export interface RootRouteChildren {
   SettingsRoute: typeof SettingsRoute
   StudentsRoute: typeof StudentsRoute
   UniversitiesRoute: typeof UniversitiesRoute
+  UniversityMatcherRoute: typeof UniversityMatcherRoute
   VisaRoute: typeof VisaRoute
 }
 
@@ -285,6 +298,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof UniversitiesRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/university-matcher': {
+      id: '/university-matcher'
+      path: '/university-matcher'
+      fullPath: '/university-matcher'
+      preLoaderRoute: typeof UniversityMatcherRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/visa': {
       id: '/visa'
       path: '/visa'
@@ -308,6 +328,7 @@ const rootRouteChildren: RootRouteChildren = {
   SettingsRoute: SettingsRoute,
   StudentsRoute: StudentsRoute,
   UniversitiesRoute: UniversitiesRoute,
+  UniversityMatcherRoute: UniversityMatcherRoute,
   VisaRoute: VisaRoute,
 }
 export const routeTree = rootRouteImport
