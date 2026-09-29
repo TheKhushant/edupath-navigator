@@ -22,12 +22,7 @@ export type ApplicationStatus =
   | "Rejected"
   | "Withdrawn";
 
-export type DocumentStatus =
-  | "Pending"
-  | "Uploaded"
-  | "Under Review"
-  | "Approved"
-  | "Rejected";
+export type DocumentStatus = "Pending" | "Uploaded" | "Under Review" | "Approved" | "Rejected";
 
 export type VisaStatus =
   | "Not Started"
@@ -39,70 +34,39 @@ export type VisaStatus =
   | "Approved"
   | "Rejected";
 
-export type PaymentStatus =
-  | "Paid"
-  | "Partial"
-  | "Pending"
-  | "Overdue";
+export type PaymentStatus = "Paid" | "Partial" | "Pending" | "Overdue";
 
-export type FollowUpStatus =
-  | "Pending"
-  | "Completed"
-  | "Overdue";
+export type FollowUpStatus = "Pending" | "Completed" | "Overdue";
 
 export type ServiceType =
-  | "Study Abroad"
-  | "Germany Ausbildung"
-  | "Opportunity Card"
-  | "Language Training";
+  "Study Abroad" | "Germany Ausbildung" | "Opportunity Card" | "Language Training";
 
 /* =========================================================
    UNIVERSITY / COURSE MATCHING TYPES
 ========================================================= */
 
-export type UniversityDifficulty =
-  | "Easy"
-  | "Medium"
-  | "Hard"
-  | "Very Hard";
+export type UniversityDifficulty = "Easy" | "Medium" | "Hard" | "Very Hard";
 
-export type TuitionPeriod =
-  | "Year"
-  | "Semester"
-  | "Month";
+export type TuitionPeriod = "Year" | "Semester" | "Month";
 
-export type LivingCostPeriod =
-  | "Month"
-  | "Year";
+export type LivingCostPeriod = "Month" | "Year";
 
 export type MatchStatus =
-  | "Matching"
-  | "Review Required"
-  | "Meets Published Requirements"
-  | "Requirement Review Needed";
+  "Matching" | "Review Required" | "Meets Published Requirements" | "Requirement Review Needed";
 
-export type MatchAction =
-  | "Shortlist"
-  | "Review"
-  | "Review credits"
-  | "Verify";
+export type MatchAction = "Shortlist" | "Review" | "Review credits" | "Verify";
 
-  export type AssessmentMatchStatus =
-  | "Meets Published Requirements"
-  | "Requirement Review Needed";
+export type AssessmentMatchStatus = "Meets Published Requirements" | "Requirement Review Needed";
 
-  export type AssessmentMatchAction =
-    | "Review credits"
-    | "Shortlist"
-    | "Verify";
+export type AssessmentMatchAction = "Review credits" | "Shortlist" | "Verify";
 
-  export interface AssessmentMatch {
-    university: string;
-    course: string;
-    status: AssessmentMatchStatus;
-    issue: string;
-    action: AssessmentMatchAction;
-  }
+export interface AssessmentMatch {
+  university: string;
+  course: string;
+  status: AssessmentMatchStatus;
+  issue: string;
+  action: AssessmentMatchAction;
+}
 
 /* =========================================================
    STUDENT
@@ -378,12 +342,7 @@ export interface Notification {
   id: string;
   title: string;
   description: string;
-  category:
-    | "Student"
-    | "Applications"
-    | "Visa"
-    | "Payments"
-    | "Documents";
+  category: "Student" | "Applications" | "Visa" | "Payments" | "Documents";
   time: string;
   tone: "info" | "warning" | "success";
   read: boolean;
