@@ -111,31 +111,54 @@ export interface Student {
 
 export interface University {
   id: string;
-
   name: string;
   country: string;
   city: string;
+  state?: string;
 
-  website: string;
-  portal: string;
+  ranking?: string;
+  difficulty?: "Easy" | "Medium" | "Hard" | "Very Hard";
 
-  applicationFee: string;
+  website?: string;
+  portal?: string;
 
-  scholarship: string;
-  financialProof: string;
-  partTime: string;
-  postStudyWork: string;
+  applicationFee?: string;
+  scholarship?: string;
+  financialProof?: string;
+  partTime?: string;
+  postStudyWork?: string;
 
-  documents: string[];
+  documents?: string[];
 
-  sop: string;
-  lor: string;
-  aps: string;
+  sop?: string;
+  lor?: string;
+  aps?: string;
 
-  lastVerified: string;
-  sourceUrl: string;
+  tuitionFeeMin?: number;
+  tuitionFeeMax?: number;
 
-  notes: string;
+  livingCostMin?: number;
+  livingCostMax?: number;
+
+  intake?: string[];
+
+  applicationOpens?: string;
+  applicationDeadline?: string;
+
+  description?: string;
+  requirements?: string[];
+
+  englishRequirement?: string;
+
+  popularCourses?: string[];
+
+  recommendedIndianPercentage?: string;
+
+  status?: string;
+  lastVerified?: string;
+
+  sourceUrl?: string;
+  notes?: string;
 }
 
 /* =========================================================

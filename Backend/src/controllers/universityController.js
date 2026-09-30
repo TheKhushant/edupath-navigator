@@ -23,10 +23,7 @@ const getUniversities = async (req, res) => {
 const getUniversityById = async (req, res) => {
   try {
     const university = await University.findOne({
-      $or: [
-        { _id: req.params.id },
-        { id: req.params.id },
-      ],
+      id: req.params.id,
     });
 
     if (!university) {
@@ -72,17 +69,12 @@ const createUniversity = async (req, res) => {
 const updateUniversity = async (req, res) => {
   try {
     const university = await University.findOneAndUpdate(
-      {
-        $or: [
-          { _id: req.params.id },
-          { id: req.params.id },
-        ],
-      },
+      { id: req.params.id },
       req.body,
       {
         new: true,
         runValidators: true,
-      }
+      },
     );
 
     if (!university) {
@@ -110,10 +102,7 @@ const updateUniversity = async (req, res) => {
 const deleteUniversity = async (req, res) => {
   try {
     const university = await University.findOneAndDelete({
-      $or: [
-        { _id: req.params.id },
-        { id: req.params.id },
-      ],
+      id: req.params.id,
     });
 
     if (!university) {

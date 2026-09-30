@@ -35,6 +35,104 @@ const wait = async <T>(value: T): Promise<T> => {
   await new Promise((resolve) => setTimeout(resolve, 120));
   return clone(value);
 };
+export const universityService = {
+  getUniversities: async (): Promise<University[]> => {
+    if (apiConfig.useMockData) {
+      return wait(mockUniversities);
+    }
+
+    const response = await apiRequest<{
+      success: boolean;
+      count: number;
+      data: University[];
+    }>("/universities");
+
+    return response.data;
+  },
+
+  getUniversityById: async (
+    id: string,
+  ): Promise<University | undefined> => {
+    if (apiConfig.useMockData) {
+      return wait(
+        mockUniversities.find(
+          (university) => university.id === id,
+        ),
+      );
+    }
+
+    const response = await apiRequest<{
+      success: boolean;
+      data: University;
+    }>(`/universities/${id}`);
+
+    return response.data;
+  },
+
+  createUniversity: async (
+    data: University,
+  ): Promise<University> => {
+    if (apiConfig.useMockData) {
+      return wait(data);
+    }
+
+    const response = await apiRequest<{
+      success: boolean;
+      data: University;
+    }>("/universities", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+
+    return response.data;
+  },
+
+  updateUniversity: async (
+    id: string,
+    data: Partial<University>,
+  ): Promise<University> => {
+    if (apiConfig.useMockData) {
+      return wait({
+        ...mockUniversities.find(
+          (university) => university.id === id,
+        ),
+        ...data,
+      } as University);
+    }
+
+    const response = await apiRequest<{
+      success: boolean;
+      data: University;
+    }>(`/universities/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+
+    return response.data;
+  },
+
+  deleteUniversity: async (
+    id: string,
+  ): Promise<University> => {
+    if (apiConfig.useMockData) {
+      return wait(
+        mockUniversities.find(
+          (university) => university.id === id,
+        ) as University,
+      );
+    }
+
+    const response = await apiRequest<{
+      success: boolean;
+      data: University;
+    }>(`/universities/${id}`, {
+      method: "DELETE",
+    });
+
+    return response.data;
+  },
+};
+
 export const studentService = {
   getStudents: async (): Promise<Student[]> => {
     if (apiConfig.useMockData) {

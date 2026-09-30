@@ -156,6 +156,16 @@ const universitySchema = new mongoose.Schema(
       trim: true,
     },
 
+    applicationOpens: {
+      type: String,
+      trim: true,
+    },
+
+    recommendedIndianPercentage: {
+      type: String,
+      trim: true,
+    },
+
     notes: {
       type: String,
       trim: true,

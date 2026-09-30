@@ -6,10 +6,9 @@ export const apiConfig = {
   useMockData:
     (import.meta.env["VITE_USE_MOCK_DATA"] ?? "true") !== "false",
 };
-
 export async function apiRequest<T>(
   path: string,
-  options?: RequestInit
+  options?: RequestInit,
 ): Promise<T> {
   const response = await fetch(`${apiConfig.baseUrl}${path}`, {
     ...options,
@@ -19,9 +18,17 @@ export async function apiRequest<T>(
     },
   });
 
+  const data = await response.json().catch(() => null);
+
   if (!response.ok) {
-    throw new Error(`Request failed with status ${response.status}`);
+    console.error("API ERROR:", data);
+
+    throw new Error(
+      data?.error ||
+      data?.message ||
+      `Request failed with status ${response.status}`,
+    );
   }
 
-  return response.json() as Promise<T>;
+  return data as T;
 }

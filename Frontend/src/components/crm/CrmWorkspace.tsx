@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { studentService } from "@/services/crmServices";
+import { studentService, universityService } from "@/services/crmServices";
+import { Textarea } from "@/components/ui/textarea";
 
 import {
   AlertCircle,
@@ -30,6 +31,7 @@ import {
   Users,
   X,
 } from "lucide-react";
+
 // import { useNavigate } from "@tanstack/react-router";
 
 import {
@@ -47,7 +49,7 @@ import {
   dashboardData,
 } from "@/data/mockData";
 import { pipelineDefinitions } from "@/data/pipelineData";
-import type { ServiceType, Student } from "@/types/crm";
+import type { ServiceType, Student, University } from "@/types/crm";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -468,30 +470,26 @@ function StudentsModule() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const deleteStudent = async () => {
-  if (!selected) return;
+    if (!selected) return;
 
-  const confirmed = window.confirm(
-    `Are you sure you want to delete ${selected.name}?`,
-  );
+    const confirmed = window.confirm(`Are you sure you want to delete ${selected.name}?`);
 
-  if (!confirmed) return;
+    if (!confirmed) return;
 
-  try {
-    await studentService.deleteStudent(selected.id);
+    try {
+      await studentService.deleteStudent(selected.id);
 
-    setStudents((current) =>
-      current.filter((student) => student.id !== selected.id),
-    );
+      setStudents((current) => current.filter((student) => student.id !== selected.id));
 
-    setSelected(null);
-    setEditing(false);
+      setSelected(null);
+      setEditing(false);
 
-    console.log("Student deleted from MongoDB:", selected.id);
-  } catch (error) {
-    console.error("Failed to delete student:", error);
-    alert("Failed to delete student");
-  }
-};
+      console.log("Student deleted from MongoDB:", selected.id);
+    } catch (error) {
+      console.error("Failed to delete student:", error);
+      alert("Failed to delete student");
+    }
+  };
 
   useEffect(() => {
     const loadStudents = async () => {
@@ -678,6 +676,7 @@ function StudentsModule() {
           )}
         </div>
       </Card>
+
       <Dialog
         open={Boolean(selected)}
         onOpenChange={(open) => {
@@ -743,26 +742,21 @@ function StudentsModule() {
                   Edit student
                 </Button>
                 <DialogFooter>
-                <Button
-                  variant="destructive"
-                  onClick={deleteStudent}
-                >
-                  Delete Student
-                </Button>
+                  <Button variant="destructive" onClick={deleteStudent}>
+                    Delete Student
+                  </Button>
 
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setEditing(false);
-                  }}
-                >
-                  Cancel
-                </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setEditing(false);
+                    }}
+                  >
+                    Cancel
+                  </Button>
 
-                <Button onClick={saveStudent}>
-                  Save changes
-                </Button>
-              </DialogFooter>
+                  <Button onClick={saveStudent}>Save changes</Button>
+                </DialogFooter>
               </DialogFooter>
             </>
           )}
@@ -1179,13 +1173,135 @@ function RecordsModule({
 }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("All");
+  const [universities, setUniversities] = useState<University[]>([]);
+  const [selectedUniversity, setSelectedUniversity] = useState<University | null>(null);
+
+  const [editingUniversity, setEditingUniversity] = useState(false);
+
+  const [addingUniversity, setAddingUniversity] = useState(false);
+
+  const [universityForm, setUniversityForm] = useState<Partial<University>>({});
+
+  const openAddUniversity = () => {
+    setUniversityForm({
+      id: `UNI-${Date.now()}`,
+      name: "",
+      country: "Germany",
+      city: "",
+      ranking: "",
+      difficulty: "Medium",
+      website: "",
+      applicationFee: "",
+      scholarship: "",
+      tuitionFeeMin: 0,
+      tuitionFeeMax: 0,
+      applicationOpens: "",
+      applicationDeadline: "",
+      englishRequirement: "",
+      popularCourses: [],
+      requirements: [],
+      recommendedIndianPercentage: "",
+      status: "Active",
+    });
+
+    setAddingUniversity(true);
+  };
+
+  const openEditUniversity = (university: University) => {
+    setSelectedUniversity(university);
+
+    setUniversityForm({
+      ...university,
+    });
+
+    setEditingUniversity(true);
+  };
+
+  const openUniversity = (university: University) => {
+    setSelectedUniversity(university);
+    setEditingUniversity(false);
+  };
+
+  const deleteUniversity = async (university: University) => {
+    const confirmed = window.confirm(`Are you sure you want to delete ${university.name}?`);
+
+    if (!confirmed) return;
+
+    try {
+      await universityService.deleteUniversity(university.id);
+
+      setUniversities((current) => current.filter((item) => item.id !== university.id));
+
+      setSelectedUniversity(null);
+      setEditingUniversity(false);
+
+      alert("University deleted successfully");
+    } catch (error) {
+      console.error("Failed to delete university:", error);
+      alert("Failed to delete university");
+    }
+  };
+
+  const saveUniversity = async () => {
+  try {
+    if (!universityForm.name?.trim()) {
+      alert("University name is required");
+      return;
+    }
+
+    console.log("University payload:", universityForm);
+
+    if (addingUniversity) {
+      const newUniversity = await universityService.createUniversity(
+        universityForm as University,
+      );
+
+      setUniversities((current) => [newUniversity, ...current]);
+
+      setAddingUniversity(false);
+
+      alert("University added successfully");
+
+      return;
+    }
+
+    if (editingUniversity && selectedUniversity) {
+      const updatedUniversity =
+        await universityService.updateUniversity(
+          selectedUniversity.id,
+          universityForm,
+        );
+
+      setUniversities((current) =>
+        current.map((university) =>
+          university.id === selectedUniversity.id
+            ? updatedUniversity
+            : university,
+        ),
+      );
+
+      setSelectedUniversity(updatedUniversity);
+      setEditingUniversity(false);
+
+      alert("University updated successfully");
+    }
+  } catch (error) {
+    console.error("Failed to save university:", error);
+
+    alert(
+      error instanceof Error
+        ? error.message
+        : "Failed to save university",
+    );
+  }
+};
 
   const config = {
     universities: {
       title: "Universities",
       description: "Compare verified institutions and programme requirements.",
       action: "Add university",
-      filters: mockUniversities.map((item) => item.country),
+      filters: [...new Set(universities.map((item) => item.country))],
     },
     courses: {
       title: "Courses",
@@ -1249,12 +1365,28 @@ function RecordsModule({
       filters: [],
     },
   }[module];
+
+  useEffect(() => {
+    if (module !== "universities") return;
+
+    const loadUniversities = async () => {
+      try {
+        const data = await universityService.getUniversities();
+        setUniversities(data);
+      } catch (error) {
+        console.error("Failed to load universities:", error);
+      }
+    };
+
+    loadUniversities();
+  }, [module]);
+
   const query = search.toLowerCase();
   if (module === "assessment") return <AssessmentModule />;
   if (module === "reports") return <ReportsModule />;
   const rows =
     module === "universities"
-      ? mockUniversities
+      ? universities
           .filter(
             (item) =>
               `${item.name} ${item.country} ${item.city}`.toLowerCase().includes(query) &&
@@ -1264,6 +1396,7 @@ function RecordsModule({
             <tr key={item.id} className="hover:bg-accent/40">
               <td className="px-5 py-3">
                 <p className="font-medium">{item.name}</p>
+
                 <p className="text-xs text-muted-foreground">
                   {item.id} · {item.city}
                 </p>
@@ -1273,19 +1406,26 @@ function RecordsModule({
 
               <td className="px-5 py-3">
                 <div>
-                  <p className="font-medium">University</p>
+                  <p className="font-medium">
+                    {item.popularCourses?.length ? item.popularCourses.join(", ") : "No courses"}
+                  </p>
+
                   <p className="text-xs text-muted-foreground">
-                    Programme details available in University Matcher
+                    {item.website || "Website not available"}
                   </p>
                 </div>
               </td>
 
-              <td className="px-5 py-3 text-muted-foreground">
-                {item.lastVerified || "Not verified"}
-              </td>
+              <td className="px-5 py-3 text-muted-foreground">{item.ranking || "Not ranked"}</td>
 
               <td className="px-5 py-3">
-                <StatusBadge>Verified</StatusBadge>
+                <StatusBadge>{item.difficulty || "Not specified"}</StatusBadge>
+              </td>
+
+              <td className="px-5 py-3 text-right">
+                <Button variant="ghost" size="sm" onClick={() => openUniversity(item)}>
+                  View <ChevronRight />
+                </Button>
               </td>
             </tr>
           ))
@@ -1444,7 +1584,7 @@ function RecordsModule({
                     ));
   const headers =
     module === "universities"
-      ? ["University", "Country", "Type", "Last verified", "Status"]
+      ? ["University", "Country", "Courses", "Ranking", "Difficulty", "Action"]
       : module === "courses"
         ? ["Course", "Country", "Specialization", "Language", "Status"]
         : module === "applications"
@@ -1458,7 +1598,12 @@ function RecordsModule({
                 : ["Student", "Date", "Time", "Status", "Priority"];
   return (
     <div className="workspace-rise">
-      <PageHeader title={config.title} description={config.description} action={config.action} />
+      <PageHeader
+        title={config.title}
+        description={config.description}
+        action={config.action}
+        onAction={module === "universities" ? openAddUniversity : undefined}
+      />
       <TableToolbar
         search={search}
         setSearch={setSearch}
@@ -1488,6 +1633,672 @@ function RecordsModule({
           )}
         </div>
       </Card>
+      <Dialog open={addingUniversity} onOpenChange={setAddingUniversity}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Add University</DialogTitle>
+
+            <DialogDescription>Add a new university to the database.</DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            {/* University Name */}
+            <label className="grid gap-1.5 text-sm font-medium sm:col-span-2">
+              University Name
+              <Input
+                value={universityForm.name ?? ""}
+                onChange={(event) =>
+                  setUniversityForm({
+                    ...universityForm,
+                    name: event.target.value,
+                  })
+                }
+                placeholder="e.g. Technical University of Munich"
+              />
+            </label>
+
+            {/* Country */}
+            <label className="grid gap-1.5 text-sm font-medium">
+              Country
+              <Input
+                value={universityForm.country ?? ""}
+                onChange={(event) =>
+                  setUniversityForm({
+                    ...universityForm,
+                    country: event.target.value,
+                  })
+                }
+              />
+            </label>
+
+            {/* City */}
+            <label className="grid gap-1.5 text-sm font-medium">
+              City
+              <Input
+                value={universityForm.city ?? ""}
+                onChange={(event) =>
+                  setUniversityForm({
+                    ...universityForm,
+                    city: event.target.value,
+                  })
+                }
+                placeholder="Munich"
+              />
+            </label>
+
+            {/* Ranking */}
+            <label className="grid gap-1.5 text-sm font-medium">
+              QS Ranking
+              <Input
+                value={universityForm.ranking ?? ""}
+                onChange={(event) =>
+                  setUniversityForm({
+                    ...universityForm,
+                    ranking: event.target.value,
+                  })
+                }
+                placeholder="e.g. 22"
+              />
+            </label>
+
+            {/* Difficulty */}
+            {/* Difficulty */}
+            <label className="grid gap-1.5 text-sm font-medium">
+              Difficulty
+              <select
+                value={universityForm.difficulty ?? "Medium"}
+                onChange={(event) =>
+                  setUniversityForm({
+                    ...universityForm,
+                    difficulty: event.target.value as "Easy" | "Medium" | "Hard" | "Very Hard",
+                  })
+                }
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="Easy">Easy</option>
+                <option value="Medium">Medium</option>
+                <option value="Hard">Hard</option>
+                <option value="Very Hard">Very Hard</option>
+              </select>
+            </label>
+
+            {/* Tuition Min */}
+            <label className="grid gap-1.5 text-sm font-medium">
+              Tuition Fee Min
+              <Input
+                type="number"
+                value={universityForm.tuitionFeeMin ?? ""}
+                onChange={(event) =>
+                  setUniversityForm({
+                    ...universityForm,
+                    tuitionFeeMin: Number(event.target.value) || 0,
+                  })
+                }
+              />
+            </label>
+
+            {/* Tuition Max */}
+            <label className="grid gap-1.5 text-sm font-medium">
+              Tuition Fee Max
+              <Input
+                type="number"
+                value={universityForm.tuitionFeeMax ?? ""}
+                onChange={(event) =>
+                  setUniversityForm({
+                    ...universityForm,
+                    tuitionFeeMax: Number(event.target.value) || 0,
+                  })
+                }
+              />
+            </label>
+
+            {/* Website */}
+            <label className="grid gap-1.5 text-sm font-medium sm:col-span-2">
+              Official Website
+              <Input
+                value={universityForm.website ?? ""}
+                onChange={(event) =>
+                  setUniversityForm({
+                    ...universityForm,
+                    website: event.target.value,
+                  })
+                }
+                placeholder="https://..."
+              />
+            </label>
+
+            {/* English Requirement */}
+            <label className="grid gap-1.5 text-sm font-medium">
+              IELTS / English Requirement
+              <Input
+                value={universityForm.englishRequirement ?? ""}
+                onChange={(event) =>
+                  setUniversityForm({
+                    ...universityForm,
+                    englishRequirement: event.target.value,
+                  })
+                }
+                placeholder="IELTS 6.5"
+              />
+            </label>
+
+            {/* Indian Percentage */}
+            <label className="grid gap-1.5 text-sm font-medium">
+              Recommended Indian %
+              <Input
+                value={universityForm.recommendedIndianPercentage ?? ""}
+                onChange={(event) =>
+                  setUniversityForm({
+                    ...universityForm,
+                    recommendedIndianPercentage: event.target.value,
+                  })
+                }
+                placeholder="70%"
+              />
+            </label>
+
+            {/* Application Opens */}
+            <label className="grid gap-1.5 text-sm font-medium">
+              Application Opens
+              <Input
+                value={universityForm.applicationOpens ?? ""}
+                onChange={(event) =>
+                  setUniversityForm({
+                    ...universityForm,
+                    applicationOpens: event.target.value,
+                  })
+                }
+                placeholder="01 October"
+              />
+            </label>
+
+            {/* Application Deadline */}
+            <label className="grid gap-1.5 text-sm font-medium">
+              Application Deadline
+              <Input
+                value={universityForm.applicationDeadline ?? ""}
+                onChange={(event) =>
+                  setUniversityForm({
+                    ...universityForm,
+                    applicationDeadline: event.target.value,
+                  })
+                }
+                placeholder="15 January"
+              />
+            </label>
+
+            
+
+            {/* Popular Courses */}
+            <label className="grid gap-1.5 text-sm font-medium sm:col-span-2">
+              Popular Courses
+              <Input
+                value={universityForm.popularCourses?.join(", ") ?? ""}
+                onChange={(event) =>
+                  setUniversityForm({
+                    ...universityForm,
+                    popularCourses: event.target.value
+                      .split(",")
+                      .map((course) => course.trim())
+                      .filter(Boolean),
+                  })
+                }
+                placeholder="Computer Science, AI, Data Science"
+              />
+            </label>
+
+            {/* Requirements */}
+            <label className="grid gap-1.5 text-sm font-medium sm:col-span-2">
+              Requirements
+              <Input
+                value={universityForm.requirements?.join(", ") ?? ""}
+                onChange={(event) =>
+                  setUniversityForm({
+                    ...universityForm,
+                    requirements: event.target.value
+                      .split(",")
+                      .map((requirement) => requirement.trim())
+                      .filter(Boolean),
+                  })
+                }
+                placeholder="APS, IELTS, Bachelor's Degree"
+              />
+            </label>
+
+            {/* Notes */}
+            <label className="grid gap-1.5 text-sm font-medium sm:col-span-2">
+              Notes
+              <Textarea
+                value={universityForm.notes ?? ""}
+                onChange={(event) =>
+                  setUniversityForm({
+                    ...universityForm,
+                    notes: event.target.value,
+                  })
+                }
+                placeholder="Additional notes..."
+              />
+            </label>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddingUniversity(false)}>
+              Cancel
+            </Button>
+
+            <Button onClick={saveUniversity}>Add University</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={Boolean(selectedUniversity) && !editingUniversity}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedUniversity(null);
+          }
+        }}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+          {selectedUniversity && (
+            <>
+              <DialogHeader>
+                <DialogTitle>{selectedUniversity.name}</DialogTitle>
+
+                <DialogDescription>
+                  {selectedUniversity.id} · {selectedUniversity.country} · {selectedUniversity.city}
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-md border border-line/60 bg-secondary/40 p-3">
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    Country
+                  </p>
+
+                  <p className="mt-1 text-sm font-medium">{selectedUniversity.country || "—"}</p>
+                </div>
+
+                <div className="rounded-md border border-line/60 bg-secondary/40 p-3">
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">City</p>
+
+                  <p className="mt-1 text-sm font-medium">{selectedUniversity.city || "—"}</p>
+                </div>
+
+                <div className="rounded-md border border-line/60 bg-secondary/40 p-3">
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    Ranking
+                  </p>
+
+                  <p className="mt-1 text-sm font-medium">
+                    {selectedUniversity.ranking || "Not ranked"}
+                  </p>
+                </div>
+
+                <div className="rounded-md border border-line/60 bg-secondary/40 p-3">
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    Difficulty
+                  </p>
+
+                  <p className="mt-1 text-sm font-medium">{selectedUniversity.difficulty || "—"}</p>
+                </div>
+
+                <div className="rounded-md border border-line/60 bg-secondary/40 p-3">
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    English Requirement
+                  </p>
+
+                  <p className="mt-1 text-sm font-medium">
+                    {selectedUniversity.englishRequirement || "—"}
+                  </p>
+                </div>
+
+                <div className="rounded-md border border-line/60 bg-secondary/40 p-3">
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    Indian Percentage
+                  </p>
+
+                  <p className="mt-1 text-sm font-medium">
+                    {selectedUniversity.recommendedIndianPercentage || "—"}
+                  </p>
+                </div>
+
+                <div className="rounded-md border border-line/60 bg-secondary/40 p-3">
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    Application Opens
+                  </p>
+
+                  <p className="mt-1 text-sm font-medium">
+                    {selectedUniversity.applicationOpens || "—"}
+                  </p>
+                </div>
+
+                <div className="rounded-md border border-line/60 bg-secondary/40 p-3">
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    Application Deadline
+                  </p>
+
+                  <p className="mt-1 text-sm font-medium">
+                    {selectedUniversity.applicationDeadline || "—"}
+                  </p>
+                </div>
+
+                <div className="rounded-md border border-line/60 bg-secondary/40 p-3 sm:col-span-2">
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    Popular Courses
+                  </p>
+
+                  <p className="mt-1 text-sm font-medium">
+                    {selectedUniversity.popularCourses?.join(", ") || "No courses available"}
+                  </p>
+                </div>
+
+                <div className="rounded-md border border-line/60 bg-secondary/40 p-3 sm:col-span-2">
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    Requirements
+                  </p>
+
+                  <p className="mt-1 text-sm font-medium">
+                    {selectedUniversity.requirements?.join(", ") || "No requirements available"}
+                  </p>
+                </div>
+
+                <div className="rounded-md border border-line/60 bg-secondary/40 p-3 sm:col-span-2">
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                    Website
+                  </p>
+
+                  <p className="mt-1 text-sm font-medium break-all">
+                    {selectedUniversity.website || "Not available"}
+                  </p>
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button variant="destructive" onClick={() => deleteUniversity(selectedUniversity)}>
+                  Delete
+                </Button>
+
+                <Button variant="outline" onClick={() => openEditUniversity(selectedUniversity)}>
+                  Edit
+                </Button>
+
+                <Button variant="outline" onClick={() => setSelectedUniversity(null)}>
+                  Close
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={editingUniversity}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditingUniversity(false);
+          }
+        }}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Edit University</DialogTitle>
+
+            <DialogDescription>Update university information.</DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            {/* University Name */}
+            <label className="grid gap-1.5 text-sm font-medium sm:col-span-2">
+              University Name
+              <Input
+                value={universityForm.name ?? ""}
+                onChange={(event) =>
+                  setUniversityForm({
+                    ...universityForm,
+                    name: event.target.value,
+                  })
+                }
+              />
+            </label>
+
+            {/* Country */}
+            <label className="grid gap-1.5 text-sm font-medium">
+              Country
+              <Input
+                value={universityForm.country ?? ""}
+                onChange={(event) =>
+                  setUniversityForm({
+                    ...universityForm,
+                    country: event.target.value,
+                  })
+                }
+              />
+            </label>
+
+            {/* City */}
+            <label className="grid gap-1.5 text-sm font-medium">
+              City
+              <Input
+                value={universityForm.city ?? ""}
+                onChange={(event) =>
+                  setUniversityForm({
+                    ...universityForm,
+                    city: event.target.value,
+                  })
+                }
+              />
+            </label>
+
+            {/* Ranking */}
+            <label className="grid gap-1.5 text-sm font-medium">
+              QS Ranking
+              <Input
+                value={universityForm.ranking ?? ""}
+                onChange={(event) =>
+                  setUniversityForm({
+                    ...universityForm,
+                    ranking: event.target.value,
+                  })
+                }
+              />
+            </label>
+
+            {/* Difficulty */}
+            <label className="grid gap-1.5 text-sm font-medium">
+              Difficulty
+
+              <select
+                value={universityForm.difficulty ?? "Medium"}
+                onChange={(event) =>
+                  setUniversityForm({
+                    ...universityForm,
+                    difficulty: event.target.value as
+                      | "Easy"
+                      | "Medium"
+                      | "Hard"
+                      | "Very Hard",
+                  })
+                }
+                className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="Easy">Easy</option>
+                <option value="Medium">Medium</option>
+                <option value="Hard">Hard</option>
+                <option value="Very Hard">Very Hard</option>
+              </select>
+            </label>
+
+            {/* Website */}
+            <label className="grid gap-1.5 text-sm font-medium sm:col-span-2">
+              Official Website
+              <Input
+                value={universityForm.website ?? ""}
+                onChange={(event) =>
+                  setUniversityForm({
+                    ...universityForm,
+                    website: event.target.value,
+                  })
+                }
+              />
+            </label>
+
+            {/* English Requirement */}
+            <label className="grid gap-1.5 text-sm font-medium">
+              IELTS / English Requirement
+              <Input
+                value={universityForm.englishRequirement ?? ""}
+                onChange={(event) =>
+                  setUniversityForm({
+                    ...universityForm,
+                    englishRequirement: event.target.value,
+                  })
+                }
+              />
+            </label>
+
+            {/* Recommended Indian Percentage */}
+            <label className="grid gap-1.5 text-sm font-medium">
+              Recommended Indian %
+              <Input
+                value={universityForm.recommendedIndianPercentage ?? ""}
+                onChange={(event) =>
+                  setUniversityForm({
+                    ...universityForm,
+                    recommendedIndianPercentage: event.target.value,
+                  })
+                }
+              />
+            </label>
+
+            {/* Application Opens */}
+            <label className="grid gap-1.5 text-sm font-medium">
+              Application Opens
+              <Input
+                value={universityForm.applicationOpens ?? ""}
+                onChange={(event) =>
+                  setUniversityForm({
+                    ...universityForm,
+                    applicationOpens: event.target.value,
+                  })
+                }
+              />
+            </label>
+
+            {/* Application Deadline */}
+            <label className="grid gap-1.5 text-sm font-medium">
+              Application Deadline
+              <Input
+                value={universityForm.applicationDeadline ?? ""}
+                onChange={(event) =>
+                  setUniversityForm({
+                    ...universityForm,
+                    applicationDeadline: event.target.value,
+                  })
+                }
+              />
+            </label>
+
+            {/* Tuition Min */}
+            <label className="grid gap-1.5 text-sm font-medium">
+              Tuition Fee Min
+              <Input
+                type="number"
+                value={universityForm.tuitionFeeMin ?? ""}
+                onChange={(event) =>
+                  setUniversityForm({
+                    ...universityForm,
+                    tuitionFeeMin: Number(event.target.value) || 0,
+                  })
+                }
+              />
+            </label>
+
+            {/* Tuition Max */}
+            <label className="grid gap-1.5 text-sm font-medium">
+              Tuition Fee Max
+              <Input
+                type="number"
+                value={universityForm.tuitionFeeMax ?? ""}
+                onChange={(event) =>
+                  setUniversityForm({
+                    ...universityForm,
+                    tuitionFeeMax: Number(event.target.value) || 0,
+                  })
+                }
+              />
+            </label>
+
+            {/* Popular Courses */}
+            <label className="grid gap-1.5 text-sm font-medium sm:col-span-2">
+              Popular Courses
+              <Input
+                value={universityForm.popularCourses?.join(", ") ?? ""}
+                onChange={(event) =>
+                  setUniversityForm({
+                    ...universityForm,
+                    popularCourses: event.target.value
+                      .split(",")
+                      .map((course) => course.trim())
+                      .filter(Boolean),
+                  })
+                }
+                placeholder="Computer Science, AI, Data Science"
+              />
+            </label>
+
+            {/* Requirements */}
+            <label className="grid gap-1.5 text-sm font-medium sm:col-span-2">
+              Requirements
+              <Input
+                value={universityForm.requirements?.join(", ") ?? ""}
+                onChange={(event) =>
+                  setUniversityForm({
+                    ...universityForm,
+                    requirements: event.target.value
+                      .split(",")
+                      .map((requirement) => requirement.trim())
+                      .filter(Boolean),
+                  })
+                }
+                placeholder="APS, IELTS, Bachelor's Degree"
+              />
+            </label>
+
+            {/* Notes */}
+            <label className="grid gap-1.5 text-sm font-medium sm:col-span-2">
+              Notes
+              <Textarea
+                value={universityForm.notes ?? ""}
+                onChange={(event) =>
+                  setUniversityForm({
+                    ...universityForm,
+                    notes: event.target.value,
+                  })
+                }
+                placeholder="Additional notes..."
+              />
+            </label>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setEditingUniversity(false);
+
+                if (selectedUniversity) {
+                  setUniversityForm({
+                    ...selectedUniversity,
+                  });
+                }
+              }}
+            >
+              Cancel
+            </Button>
+
+            <Button onClick={saveUniversity}>Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
