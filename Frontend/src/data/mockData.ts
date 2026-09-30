@@ -1354,6 +1354,21 @@ export const dashboardData: DashboardData = {
     },
     { title: "Payment overdue", detail: "application fee — Arjun Mehta.", tone: "warning" },
   ],
+  // Mock-mode Reports figures, derived from the mock records above
+  reports: {
+    activeStudents: mockStudents.filter((student) => student.status === "Active").length,
+    services: new Set(mockStudents.map((student) => student.service)).size,
+    applications: mockApplications.length,
+    offers: mockApplications.filter((item) => item.status === "Offer Received").length,
+    outstanding: [
+      {
+        currency: "INR",
+        amount: mockPayments
+          .filter((item) => item.status !== "Paid")
+          .reduce((sum, item) => sum + item.amount - item.paidAmount, 0),
+      },
+    ],
+  },
 };
 
 export const mockAssessment: AssessmentResult = {

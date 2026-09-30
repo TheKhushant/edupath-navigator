@@ -1,4 +1,5 @@
 import { apiConfig, apiDownload, apiRequest } from "@/lib/api";
+import { buildAssessment } from "@/services/studentAssessment";
 import {
   dashboardData,
   mockApplications,
@@ -53,15 +54,9 @@ export const universityService = {
     return response.data;
   },
 
-  getUniversityById: async (
-    id: string,
-  ): Promise<University | undefined> => {
+  getUniversityById: async (id: string): Promise<University | undefined> => {
     if (apiConfig.useMockData) {
-      return wait(
-        mockUniversities.find(
-          (university) => university.id === id,
-        ),
-      );
+      return wait(mockUniversities.find((university) => university.id === id));
     }
 
     const response = await apiRequest<{
@@ -72,9 +67,7 @@ export const universityService = {
     return response.data;
   },
 
-  createUniversity: async (
-    data: University,
-  ): Promise<University> => {
+  createUniversity: async (data: University): Promise<University> => {
     if (apiConfig.useMockData) {
       return wait(data);
     }
@@ -90,15 +83,10 @@ export const universityService = {
     return response.data;
   },
 
-  updateUniversity: async (
-    id: string,
-    data: Partial<University>,
-  ): Promise<University> => {
+  updateUniversity: async (id: string, data: Partial<University>): Promise<University> => {
     if (apiConfig.useMockData) {
       return wait({
-        ...mockUniversities.find(
-          (university) => university.id === id,
-        ),
+        ...mockUniversities.find((university) => university.id === id),
         ...data,
       } as University);
     }
@@ -114,15 +102,9 @@ export const universityService = {
     return response.data;
   },
 
-  deleteUniversity: async (
-    id: string,
-  ): Promise<University> => {
+  deleteUniversity: async (id: string): Promise<University> => {
     if (apiConfig.useMockData) {
-      return wait(
-        mockUniversities.find(
-          (university) => university.id === id,
-        ) as University,
-      );
+      return wait(mockUniversities.find((university) => university.id === id) as University);
     }
 
     const response = await apiRequest<{
@@ -264,10 +246,7 @@ export const studentService = {
     return response.data;
   },
 
-  updateStudent: async (
-    id: string,
-    data: Partial<Student>,
-  ): Promise<Student> => {
+  updateStudent: async (id: string, data: Partial<Student>): Promise<Student> => {
     if (apiConfig.useMockData) {
       return wait({
         ...mockStudents.find((student) => student.id === id),
@@ -299,5 +278,376 @@ export const studentService = {
     });
 
     return response.data;
+  },
+};
+
+/* =========================================================
+   BACKEND RECORD SHAPES
+   Mongo documents use studentName / universityName / courseName and
+   ObjectId references; the frontend types use display names and the
+   readable external IDs. Missing text fields map to "" (not recorded).
+========================================================= */
+
+interface ListResponse<T> {
+  success: boolean;
+  count: number;
+  data: T[];
+}
+
+interface ItemResponse<T> {
+  success: boolean;
+  data: T;
+}
+
+interface MongoRecord {
+  _id: string;
+  id?: string;
+}
+
+interface StudentLinkedRecord extends MongoRecord {
+  studentId?: string;
+  studentExternalId?: string;
+  studentName?: string;
+}
+
+const recordId = (record: MongoRecord) => record.id || record._id;
+const text = (value: string | undefined) => value ?? "";
+
+interface ApplicationRecord extends StudentLinkedRecord {
+  universityName?: string;
+  courseName?: string;
+  intake?: string;
+  status?: string;
+  deadline?: string;
+  submissionDate?: string;
+  offerStatus?: string;
+  counsellor?: string;
+  notes?: string;
+}
+
+const toApplication = (record: ApplicationRecord): Application => {
+  const application: Application = {
+    id: recordId(record),
+    studentId: record.studentExternalId || text(record.studentId),
+    student: text(record.studentName),
+    university: text(record.universityName),
+    course: text(record.courseName),
+    intake: text(record.intake),
+    status: text(record.status),
+    deadline: text(record.deadline),
+    offerStatus: text(record.offerStatus),
+    counsellor: text(record.counsellor),
+    notes: text(record.notes),
+  };
+  if (record.submissionDate) application.submissionDate = record.submissionDate;
+  return application;
+};
+
+interface DocumentApiRecord extends StudentLinkedRecord {
+  type?: string;
+  status?: string;
+  uploadedDate?: string;
+  verifiedBy?: string;
+  notes?: string;
+}
+
+const toDocument = (record: DocumentApiRecord): DocumentRecord => {
+  const document: DocumentRecord = {
+    id: recordId(record),
+    student: text(record.studentName),
+    studentId: record.studentExternalId || text(record.studentId),
+    type: text(record.type),
+    status: text(record.status),
+    notes: text(record.notes),
+  };
+  if (record.uploadedDate) document.uploadedDate = record.uploadedDate;
+  if (record.verifiedBy) document.verifiedBy = record.verifiedBy;
+  return document;
+};
+
+interface VisaCaseRecord extends StudentLinkedRecord {
+  country?: string;
+  university?: string;
+  visaType?: string;
+  applicationDate?: string;
+  appointmentDate?: string;
+  documentStatus?: string;
+  status?: string;
+  notes?: string;
+}
+
+const toVisaCase = (record: VisaCaseRecord): VisaCase => {
+  const visaCase: VisaCase = {
+    id: recordId(record),
+    student: text(record.studentName),
+    country: text(record.country),
+    university: text(record.university),
+    visaType: text(record.visaType),
+    applicationDate: text(record.applicationDate),
+    documentStatus: text(record.documentStatus),
+    status: text(record.status),
+    notes: text(record.notes),
+  };
+  if (record.appointmentDate) visaCase.appointmentDate = record.appointmentDate;
+  return visaCase;
+};
+
+interface PaymentRecord extends StudentLinkedRecord {
+  service?: string;
+  paymentType?: string;
+  amount: number;
+  paidAmount?: number;
+  currency?: string;
+  dueDate?: string;
+  paymentDate?: string;
+  status?: string;
+  method?: string;
+  paymentMethod?: string;
+  notes?: string;
+}
+
+const toPayment = (record: PaymentRecord): Payment => {
+  const payment: Payment = {
+    id: recordId(record),
+    student: text(record.studentName),
+    service: text(record.service),
+    paymentType: text(record.paymentType),
+    amount: record.amount,
+    // The Payment schema defaults paidAmount to 0
+    paidAmount: record.paidAmount ?? 0,
+    dueDate: text(record.dueDate),
+    status: text(record.status),
+    method: record.method || text(record.paymentMethod),
+    notes: text(record.notes),
+  };
+  if (record.currency) payment.currency = record.currency;
+  if (record.paymentDate) payment.paymentDate = record.paymentDate;
+  return payment;
+};
+
+interface FollowUpRecord extends StudentLinkedRecord {
+  counsellor?: string;
+  assignedTo?: string;
+  title?: string;
+  type?: string;
+  date?: string;
+  dueDate?: string;
+  time?: string;
+  priority?: string;
+  status?: string;
+  notes?: string;
+  description?: string;
+}
+
+const toFollowUp = (record: FollowUpRecord): FollowUp => ({
+  id: recordId(record),
+  student: text(record.studentName),
+  counsellor: record.counsellor || text(record.assignedTo),
+  type: record.type || text(record.title),
+  date: record.date || text(record.dueDate),
+  time: text(record.time),
+  priority: text(record.priority),
+  status: text(record.status),
+  notes: record.notes || text(record.description),
+});
+
+interface NotificationRecord extends MongoRecord {
+  title: string;
+  description?: string;
+  message?: string;
+  category?: string;
+  type?: string;
+  time?: string;
+  tone?: string;
+  read?: boolean;
+}
+
+const toNotification = (record: NotificationRecord): Notification => ({
+  id: recordId(record),
+  title: record.title,
+  description: record.description || text(record.message),
+  category: record.category || text(record.type),
+  time: text(record.time),
+  tone: text(record.tone),
+  // The Notification schema defaults read to false
+  read: record.read ?? false,
+});
+
+interface CourseRecord extends MongoRecord {
+  name: string;
+  degree?: string;
+  specialization?: string;
+  country?: string;
+  duration?: string;
+  language?: string;
+  requirements?: string;
+  notes?: string;
+  status?: string;
+}
+
+const toCourse = (record: CourseRecord): Course => ({
+  id: recordId(record),
+  name: record.name,
+  degree: text(record.degree),
+  specialization: text(record.specialization),
+  country: text(record.country),
+  duration: text(record.duration),
+  language: text(record.language),
+  requirements: text(record.requirements),
+  notes: text(record.notes),
+  status: text(record.status),
+});
+
+/** GET /university-courses populates universityId with the University document. */
+interface UniversityCourseRecord
+  extends MongoRecord, Omit<UniversityCourse, "id" | "universityId" | "universityName"> {
+  universityId?: string | (MongoRecord & { name?: string }) | null;
+  universityExternalId?: string;
+  universityName?: string;
+}
+
+const toUniversityCourse = ({
+  _id,
+  id,
+  universityId,
+  universityExternalId,
+  universityName,
+  ...rest
+}: UniversityCourseRecord): UniversityCourse => {
+  const university = typeof universityId === "object" && universityId ? universityId : undefined;
+  const course: UniversityCourse = {
+    ...rest,
+    id: id || _id,
+    universityId:
+      universityExternalId ||
+      (university ? recordId(university) : typeof universityId === "string" ? universityId : ""),
+  };
+  const name = universityName || university?.name;
+  if (name) course.universityName = name;
+  return course;
+};
+
+/* =========================================================
+   LIST SERVICES (the UI lists and filters these records)
+========================================================= */
+
+export const applicationService = {
+  getApplications: async (): Promise<Application[]> => {
+    if (apiConfig.useMockData) return wait(mockApplications);
+
+    const response = await apiRequest<ListResponse<ApplicationRecord>>("/applications");
+    return response.data.map(toApplication);
+  },
+
+  getApplicationById: async (id: string): Promise<Application | undefined> => {
+    if (apiConfig.useMockData) return wait(mockApplications.find((item) => item.id === id));
+
+    const response = await apiRequest<ItemResponse<ApplicationRecord>>(`/applications/${id}`);
+    return toApplication(response.data);
+  },
+};
+
+export const documentService = {
+  getDocuments: async (): Promise<DocumentRecord[]> => {
+    if (apiConfig.useMockData) return wait(mockDocuments);
+
+    const response = await apiRequest<ListResponse<DocumentApiRecord>>("/documents");
+    return response.data.map(toDocument);
+  },
+};
+
+export const visaService = {
+  getVisaCases: async (): Promise<VisaCase[]> => {
+    if (apiConfig.useMockData) return wait(mockVisaCases);
+
+    const response = await apiRequest<ListResponse<VisaCaseRecord>>("/visa-cases");
+    return response.data.map(toVisaCase);
+  },
+};
+
+export const paymentService = {
+  getPayments: async (): Promise<Payment[]> => {
+    if (apiConfig.useMockData) return wait(mockPayments);
+
+    const response = await apiRequest<ListResponse<PaymentRecord>>("/payments");
+    return response.data.map(toPayment);
+  },
+};
+
+export const followupService = {
+  getFollowUps: async (): Promise<FollowUp[]> => {
+    if (apiConfig.useMockData) return wait(mockFollowUps);
+
+    const response = await apiRequest<ListResponse<FollowUpRecord>>("/follow-ups");
+    return response.data.map(toFollowUp);
+  },
+};
+
+export const notificationService = {
+  getNotifications: async (): Promise<Notification[]> => {
+    if (apiConfig.useMockData) return wait(mockNotifications);
+
+    const response = await apiRequest<ListResponse<NotificationRecord>>("/notifications");
+    return response.data.map(toNotification);
+  },
+
+  markRead: async (id: string): Promise<Notification> => {
+    if (apiConfig.useMockData) {
+      const notification = mockNotifications.find((item) => item.id === id);
+      if (!notification) throw new Error("Notification not found");
+      return wait({ ...notification, read: true });
+    }
+
+    const response = await apiRequest<ItemResponse<NotificationRecord>>(`/notifications/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ read: true }),
+    });
+    return toNotification(response.data);
+  },
+};
+
+export const courseService = {
+  getCourses: async (): Promise<Course[]> => {
+    if (apiConfig.useMockData) return wait(mockCourses);
+
+    const response = await apiRequest<ListResponse<CourseRecord>>("/courses");
+    return response.data.map(toCourse);
+  },
+};
+
+export const universityCourseService = {
+  getUniversityCourses: async (): Promise<UniversityCourse[]> => {
+    if (apiConfig.useMockData) return wait(mockUniversityCourses);
+
+    const response = await apiRequest<ListResponse<UniversityCourseRecord>>("/university-courses");
+    return response.data.map(toUniversityCourse);
+  },
+};
+
+export const dashboardService = {
+  /** Aggregated on the server (GET /dashboard) instead of downloading every collection. */
+  getDashboard: async (): Promise<DashboardData> => {
+    if (apiConfig.useMockData) return wait(dashboardData);
+
+    const response = await apiRequest<ItemResponse<DashboardData>>("/dashboard");
+    return response.data;
+  },
+};
+
+export const assessmentService = {
+  /**
+   * Assessment for one student, built from real students, universities,
+   * countries and documents (mock mode returns the sample assessment).
+   */
+  assessStudent: async (student: Student): Promise<AssessmentResult> => {
+    if (apiConfig.useMockData) return wait(mockAssessment);
+
+    const [universities, countries, documents] = await Promise.all([
+      universityService.getUniversities(),
+      countryService.getCountries(),
+      documentService.getDocuments(),
+    ]);
+
+    return buildAssessment(student, universities, countries, documents);
   },
 };

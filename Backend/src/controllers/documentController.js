@@ -1,4 +1,5 @@
 const Document = require("../models/Document");
+const { idFilter } = require("../utils/idFilter");
 
 // GET all documents
 const getDocuments = async (req, res) => {
@@ -22,12 +23,7 @@ const getDocuments = async (req, res) => {
 // GET single document
 const getDocumentById = async (req, res) => {
   try {
-    const document = await Document.findOne({
-      $or: [
-        { _id: req.params.id },
-        { id: req.params.id },
-      ],
-    });
+    const document = await Document.findOne(idFilter(req.params.id));
 
     if (!document) {
       return res.status(404).json({
@@ -72,12 +68,7 @@ const createDocument = async (req, res) => {
 const updateDocument = async (req, res) => {
   try {
     const document = await Document.findOneAndUpdate(
-      {
-        $or: [
-          { _id: req.params.id },
-          { id: req.params.id },
-        ],
-      },
+      idFilter(req.params.id),
       req.body,
       {
         new: true,
@@ -109,12 +100,7 @@ const updateDocument = async (req, res) => {
 // DELETE document
 const deleteDocument = async (req, res) => {
   try {
-    const document = await Document.findOneAndDelete({
-      $or: [
-        { _id: req.params.id },
-        { id: req.params.id },
-      ],
-    });
+    const document = await Document.findOneAndDelete(idFilter(req.params.id));
 
     if (!document) {
       return res.status(404).json({

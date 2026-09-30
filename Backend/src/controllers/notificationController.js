@@ -1,4 +1,5 @@
 const Notification = require("../models/Notification");
+const { idFilter } = require("../utils/idFilter");
 
 // GET all notifications
 const getNotifications = async (req, res) => {
@@ -22,12 +23,7 @@ const getNotifications = async (req, res) => {
 // GET single notification
 const getNotificationById = async (req, res) => {
   try {
-    const notification = await Notification.findOne({
-      $or: [
-        { _id: req.params.id },
-        { id: req.params.id },
-      ],
-    });
+    const notification = await Notification.findOne(idFilter(req.params.id));
 
     if (!notification) {
       return res.status(404).json({
@@ -72,12 +68,7 @@ const createNotification = async (req, res) => {
 const updateNotification = async (req, res) => {
   try {
     const notification = await Notification.findOneAndUpdate(
-      {
-        $or: [
-          { _id: req.params.id },
-          { id: req.params.id },
-        ],
-      },
+      idFilter(req.params.id),
       req.body,
       {
         new: true,
@@ -109,12 +100,7 @@ const updateNotification = async (req, res) => {
 // DELETE notification
 const deleteNotification = async (req, res) => {
   try {
-    const notification = await Notification.findOneAndDelete({
-      $or: [
-        { _id: req.params.id },
-        { id: req.params.id },
-      ],
-    });
+    const notification = await Notification.findOneAndDelete(idFilter(req.params.id));
 
     if (!notification) {
       return res.status(404).json({

@@ -1,4 +1,5 @@
 const FollowUp = require("../models/FollowUp");
+const { idFilter } = require("../utils/idFilter");
 
 // GET all follow-ups
 const getFollowUps = async (req, res) => {
@@ -22,12 +23,7 @@ const getFollowUps = async (req, res) => {
 // GET single follow-up
 const getFollowUpById = async (req, res) => {
   try {
-    const followUp = await FollowUp.findOne({
-      $or: [
-        { _id: req.params.id },
-        { id: req.params.id },
-      ],
-    });
+    const followUp = await FollowUp.findOne(idFilter(req.params.id));
 
     if (!followUp) {
       return res.status(404).json({
@@ -72,12 +68,7 @@ const createFollowUp = async (req, res) => {
 const updateFollowUp = async (req, res) => {
   try {
     const followUp = await FollowUp.findOneAndUpdate(
-      {
-        $or: [
-          { _id: req.params.id },
-          { id: req.params.id },
-        ],
-      },
+      idFilter(req.params.id),
       req.body,
       {
         new: true,
@@ -109,12 +100,7 @@ const updateFollowUp = async (req, res) => {
 // DELETE follow-up
 const deleteFollowUp = async (req, res) => {
   try {
-    const followUp = await FollowUp.findOneAndDelete({
-      $or: [
-        { _id: req.params.id },
-        { id: req.params.id },
-      ],
-    });
+    const followUp = await FollowUp.findOneAndDelete(idFilter(req.params.id));
 
     if (!followUp) {
       return res.status(404).json({

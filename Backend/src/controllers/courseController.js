@@ -1,4 +1,5 @@
 const Course = require("../models/Course");
+const { idFilter } = require("../utils/idFilter");
 
 // GET all courses
 const getCourses = async (req, res) => {
@@ -22,12 +23,7 @@ const getCourses = async (req, res) => {
 // GET single course
 const getCourseById = async (req, res) => {
   try {
-    const course = await Course.findOne({
-      $or: [
-        { _id: req.params.id },
-        { id: req.params.id },
-      ],
-    });
+    const course = await Course.findOne(idFilter(req.params.id));
 
     if (!course) {
       return res.status(404).json({
@@ -72,12 +68,7 @@ const createCourse = async (req, res) => {
 const updateCourse = async (req, res) => {
   try {
     const course = await Course.findOneAndUpdate(
-      {
-        $or: [
-          { _id: req.params.id },
-          { id: req.params.id },
-        ],
-      },
+      idFilter(req.params.id),
       req.body,
       {
         new: true,
@@ -109,12 +100,7 @@ const updateCourse = async (req, res) => {
 // DELETE course
 const deleteCourse = async (req, res) => {
   try {
-    const course = await Course.findOneAndDelete({
-      $or: [
-        { _id: req.params.id },
-        { id: req.params.id },
-      ],
-    });
+    const course = await Course.findOneAndDelete(idFilter(req.params.id));
 
     if (!course) {
       return res.status(404).json({

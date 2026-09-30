@@ -1,4 +1,5 @@
 const Payment = require("../models/Payment");
+const { idFilter } = require("../utils/idFilter");
 
 // GET all payments
 const getPayments = async (req, res) => {
@@ -22,12 +23,7 @@ const getPayments = async (req, res) => {
 // GET single payment
 const getPaymentById = async (req, res) => {
   try {
-    const payment = await Payment.findOne({
-      $or: [
-        { _id: req.params.id },
-        { id: req.params.id },
-      ],
-    });
+    const payment = await Payment.findOne(idFilter(req.params.id));
 
     if (!payment) {
       return res.status(404).json({
@@ -72,12 +68,7 @@ const createPayment = async (req, res) => {
 const updatePayment = async (req, res) => {
   try {
     const payment = await Payment.findOneAndUpdate(
-      {
-        $or: [
-          { _id: req.params.id },
-          { id: req.params.id },
-        ],
-      },
+      idFilter(req.params.id),
       req.body,
       {
         new: true,
@@ -109,12 +100,7 @@ const updatePayment = async (req, res) => {
 // DELETE payment
 const deletePayment = async (req, res) => {
   try {
-    const payment = await Payment.findOneAndDelete({
-      $or: [
-        { _id: req.params.id },
-        { id: req.params.id },
-      ],
-    });
+    const payment = await Payment.findOneAndDelete(idFilter(req.params.id));
 
     if (!payment) {
       return res.status(404).json({

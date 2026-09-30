@@ -1,4 +1,5 @@
 const Country = require("../models/Country");
+const { idFilter } = require("../utils/idFilter");
 
 // GET all countries
 const getCountries = async (req, res) => {
@@ -22,12 +23,7 @@ const getCountries = async (req, res) => {
 // GET single country
 const getCountryById = async (req, res) => {
   try {
-    const country = await Country.findOne({
-      $or: [
-        { _id: req.params.id },
-        { id: req.params.id },
-      ],
-    });
+    const country = await Country.findOne(idFilter(req.params.id));
 
     if (!country) {
       return res.status(404).json({
@@ -72,12 +68,7 @@ const createCountry = async (req, res) => {
 const updateCountry = async (req, res) => {
   try {
     const country = await Country.findOneAndUpdate(
-      {
-        $or: [
-          { _id: req.params.id },
-          { id: req.params.id },
-        ],
-      },
+      idFilter(req.params.id),
       req.body,
       {
         new: true,
@@ -109,12 +100,7 @@ const updateCountry = async (req, res) => {
 // DELETE country
 const deleteCountry = async (req, res) => {
   try {
-    const country = await Country.findOneAndDelete({
-      $or: [
-        { _id: req.params.id },
-        { id: req.params.id },
-      ],
-    });
+    const country = await Country.findOneAndDelete(idFilter(req.params.id));
 
     if (!country) {
       return res.status(404).json({

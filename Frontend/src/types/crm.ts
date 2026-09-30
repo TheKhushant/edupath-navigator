@@ -11,6 +11,13 @@ export type StudentStage =
 
 export type RecordStatus = "Active" | "On Hold" | "Archived";
 
+/**
+ * Known values of a field the backend stores as free text. Accepts any
+ * string (records created through the API may use other values) while
+ * keeping the known values for autocomplete and comparisons.
+ */
+export type KnownOr<T extends string> = T | (string & {});
+
 export type ApplicationStatus =
   | "Not Started"
   | "Draft"
@@ -231,46 +238,48 @@ export interface Sheet2Row {
 ========================================================= */
 
 export interface UniversityCourse {
+  /** Name of the linked university (from the populated reference). */
+  universityName?: string;
   id: string;
   universityId: string;
 
   courseName: string;
-  canonicalCourse: string;
-  aliases: string[];
+  canonicalCourse?: string;
+  aliases?: string[];
 
-  degree: string;
-  specialization: string;
+  degree?: string;
+  specialization?: string;
 
-  duration: string;
-  language: string;
+  duration?: string;
+  language?: string;
 
-  tuitionMin: number;
-  tuitionMax: number;
-  tuitionCurrency: string;
-  tuitionPeriod: TuitionPeriod;
+  tuitionMin?: number;
+  tuitionMax?: number;
+  tuitionCurrency?: string;
+  tuitionPeriod?: TuitionPeriod;
 
-  requiredDegree: string;
-  minimumGpa: string;
+  requiredDegree?: string;
+  minimumGpa?: string;
 
   ielts?: string;
   toefl?: string;
   gre?: string;
 
-  eligibility: string;
+  eligibility?: string;
 
-  entranceExam: string;
-  interview: string;
+  entranceExam?: string;
+  interview?: string;
 
-  difficulty: UniversityDifficulty;
+  difficulty?: UniversityDifficulty;
 
-  intake: string;
+  intake?: string;
 
-  applicationStartDate: string;
-  applicationDeadline: string;
+  applicationStartDate?: string;
+  applicationDeadline?: string;
 
-  lastVerified: string;
-  sourceUrl: string;
-  notes: string;
+  lastVerified?: string;
+  sourceUrl?: string;
+  notes?: string;
 }
 
 /* =========================================================
@@ -410,7 +419,7 @@ export interface Application {
   university: string;
   course: string;
   intake: string;
-  status: ApplicationStatus;
+  status: KnownOr<ApplicationStatus>;
   deadline: string;
   submissionDate?: string;
   offerStatus: string;
@@ -427,7 +436,7 @@ export interface VisaCase {
   applicationDate: string;
   appointmentDate?: string;
   documentStatus: string;
-  status: VisaStatus;
+  status: KnownOr<VisaStatus>;
   notes: string;
 }
 
@@ -436,7 +445,7 @@ export interface DocumentRecord {
   student: string;
   studentId: string;
   type: string;
-  status: DocumentStatus;
+  status: KnownOr<DocumentStatus>;
   uploadedDate?: string;
   verifiedBy?: string;
   notes: string;
@@ -445,13 +454,14 @@ export interface DocumentRecord {
 export interface Payment {
   id: string;
   student: string;
-  service: ServiceType;
+  service: KnownOr<ServiceType>;
   paymentType: string;
   amount: number;
   paidAmount: number;
+  currency?: string;
   dueDate: string;
   paymentDate?: string;
-  status: PaymentStatus;
+  status: KnownOr<PaymentStatus>;
   method: string;
   notes: string;
 }
@@ -463,8 +473,8 @@ export interface FollowUp {
   type: string;
   date: string;
   time: string;
-  priority: "High" | "Medium" | "Low";
-  status: FollowUpStatus;
+  priority: KnownOr<"High" | "Medium" | "Low">;
+  status: KnownOr<FollowUpStatus>;
   notes: string;
 }
 
@@ -472,9 +482,9 @@ export interface Notification {
   id: string;
   title: string;
   description: string;
-  category: "Student" | "Applications" | "Visa" | "Payments" | "Documents";
+  category: KnownOr<"Student" | "Applications" | "Visa" | "Payments" | "Documents">;
   time: string;
-  tone: "info" | "warning" | "success";
+  tone: KnownOr<"info" | "warning" | "success">;
   read: boolean;
 }
 
@@ -493,6 +503,7 @@ export interface DashboardData {
   enquiryTrend: {
     label: string;
     height: string;
+    count?: number;
   }[];
 
   pipeline: {
@@ -520,6 +531,15 @@ export interface DashboardData {
     detail: string;
     tone: "success" | "brand" | "warning";
   }[];
+
+  /** Figures for the Reports page. */
+  reports: {
+    activeStudents: number;
+    services: number;
+    applications: number;
+    offers: number;
+    outstanding: { currency: string; amount: number }[];
+  };
 }
 
 /* =========================================================

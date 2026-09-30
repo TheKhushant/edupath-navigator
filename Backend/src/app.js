@@ -12,6 +12,7 @@ const visaCaseRoutes = require("./routes/visaCaseRoutes");
 const paymentRoutes = require("./routes/paymentRoutes");
 const followUpRoutes = require("./routes/followUpRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
+const dashboardRoutes = require("./routes/dashboardRoutes");
 
 const app = express();
 
@@ -46,6 +47,7 @@ app.use("/api/visa-cases", visaCaseRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/follow-ups", followUpRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/dashboard", dashboardRoutes);
 
 // Health check
 app.get("/api/health", (req, res) => {

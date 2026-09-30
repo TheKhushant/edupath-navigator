@@ -1,4 +1,5 @@
 const UniversityCourse = require("../models/UniversityCourse");
+const { idFilter } = require("../utils/idFilter");
 
 // GET all university courses
 const getUniversityCourses = async (req, res) => {
@@ -25,12 +26,7 @@ const getUniversityCourses = async (req, res) => {
 // GET single university course
 const getUniversityCourseById = async (req, res) => {
   try {
-    const course = await UniversityCourse.findOne({
-      $or: [
-        { _id: req.params.id },
-        { id: req.params.id },
-      ],
-    })
+    const course = await UniversityCourse.findOne(idFilter(req.params.id))
       .populate("universityId")
       .populate("courseId");
 
@@ -77,12 +73,7 @@ const createUniversityCourse = async (req, res) => {
 const updateUniversityCourse = async (req, res) => {
   try {
     const course = await UniversityCourse.findOneAndUpdate(
-      {
-        $or: [
-          { _id: req.params.id },
-          { id: req.params.id },
-        ],
-      },
+      idFilter(req.params.id),
       req.body,
       {
         new: true,
@@ -114,12 +105,7 @@ const updateUniversityCourse = async (req, res) => {
 // DELETE university course
 const deleteUniversityCourse = async (req, res) => {
   try {
-    const course = await UniversityCourse.findOneAndDelete({
-      $or: [
-        { _id: req.params.id },
-        { id: req.params.id },
-      ],
-    });
+    const course = await UniversityCourse.findOneAndDelete(idFilter(req.params.id));
 
     if (!course) {
       return res.status(404).json({

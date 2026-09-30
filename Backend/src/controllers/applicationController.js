@@ -1,4 +1,5 @@
 const Application = require("../models/Application");
+const { idFilter } = require("../utils/idFilter");
 
 // GET all applications
 const getApplications = async (req, res) => {
@@ -22,12 +23,7 @@ const getApplications = async (req, res) => {
 // GET single application
 const getApplicationById = async (req, res) => {
   try {
-    const application = await Application.findOne({
-      $or: [
-        { _id: req.params.id },
-        { id: req.params.id },
-      ],
-    });
+    const application = await Application.findOne(idFilter(req.params.id));
 
     if (!application) {
       return res.status(404).json({
@@ -72,12 +68,7 @@ const createApplication = async (req, res) => {
 const updateApplication = async (req, res) => {
   try {
     const application = await Application.findOneAndUpdate(
-      {
-        $or: [
-          { _id: req.params.id },
-          { id: req.params.id },
-        ],
-      },
+      idFilter(req.params.id),
       req.body,
       {
         new: true,
@@ -109,12 +100,7 @@ const updateApplication = async (req, res) => {
 // DELETE application
 const deleteApplication = async (req, res) => {
   try {
-    const application = await Application.findOneAndDelete({
-      $or: [
-        { _id: req.params.id },
-        { id: req.params.id },
-      ],
-    });
+    const application = await Application.findOneAndDelete(idFilter(req.params.id));
 
     if (!application) {
       return res.status(404).json({

@@ -1,4 +1,5 @@
 const VisaCase = require("../models/VisaCase");
+const { idFilter } = require("../utils/idFilter");
 
 // GET all visa cases
 const getVisaCases = async (req, res) => {
@@ -22,12 +23,7 @@ const getVisaCases = async (req, res) => {
 // GET single visa case
 const getVisaCaseById = async (req, res) => {
   try {
-    const visaCase = await VisaCase.findOne({
-      $or: [
-        { _id: req.params.id },
-        { id: req.params.id },
-      ],
-    });
+    const visaCase = await VisaCase.findOne(idFilter(req.params.id));
 
     if (!visaCase) {
       return res.status(404).json({
@@ -72,12 +68,7 @@ const createVisaCase = async (req, res) => {
 const updateVisaCase = async (req, res) => {
   try {
     const visaCase = await VisaCase.findOneAndUpdate(
-      {
-        $or: [
-          { _id: req.params.id },
-          { id: req.params.id },
-        ],
-      },
+      idFilter(req.params.id),
       req.body,
       {
         new: true,
@@ -109,12 +100,7 @@ const updateVisaCase = async (req, res) => {
 // DELETE visa case
 const deleteVisaCase = async (req, res) => {
   try {
-    const visaCase = await VisaCase.findOneAndDelete({
-      $or: [
-        { _id: req.params.id },
-        { id: req.params.id },
-      ],
-    });
+    const visaCase = await VisaCase.findOneAndDelete(idFilter(req.params.id));
 
     if (!visaCase) {
       return res.status(404).json({

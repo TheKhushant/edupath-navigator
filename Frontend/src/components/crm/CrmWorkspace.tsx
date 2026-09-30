@@ -1,6 +1,19 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { studentService, universityService } from "@/services/crmServices";
+import {
+  applicationService,
+  assessmentService,
+  courseService,
+  documentService,
+  followupService,
+  notificationService,
+  paymentService,
+  studentService,
+  universityService,
+  visaService,
+} from "@/services/crmServices";
+import { useDashboard, useNotifications, useStudents } from "@/hooks/useCrm";
+import { apiConfig } from "@/lib/api";
 import { UniversityImport } from "@/components/crm/UniversityImport";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -33,24 +46,19 @@ import {
   X,
 } from "lucide-react";
 
-// import { useNavigate } from "@tanstack/react-router";
-
-import {
-  mockApplications,
-  mockAssessment,
-  mockCountries,
-  mockCourses,
-  mockDocuments,
-  mockFollowUps,
-  mockNotifications,
-  mockPayments,
-  mockStudents,
-  mockUniversities,
-  mockVisaCases,
-  dashboardData,
-} from "@/data/mockData";
 import { pipelineDefinitions } from "@/data/pipelineData";
-import type { ServiceType, Student, University } from "@/types/crm";
+import type {
+  Application,
+  AssessmentResult,
+  Course,
+  DocumentRecord,
+  FollowUp,
+  Payment,
+  ServiceType,
+  Student,
+  University,
+  VisaCase,
+} from "@/types/crm";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -273,6 +281,37 @@ function EmptyState({ title, description }: { title: string; description: string
   );
 }
 
+function LoadingState({ label = "Loading records..." }: { label?: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-center">
+      <div className="mb-3 h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      <p className="text-sm text-muted-foreground">{label}</p>
+    </div>
+  );
+}
+
+function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-center">
+      <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-full bg-danger/15 text-danger-foreground">
+        <AlertCircle className="h-5 w-5" />
+      </div>
+      <h3 className="font-semibold">Unable to load data</h3>
+      <p className="mt-1 max-w-sm text-sm text-muted-foreground">{message}</p>
+      {onRetry && (
+        <Button variant="outline" size="sm" className="mt-4" onClick={onRetry}>
+          Try again
+        </Button>
+      )}
+    </div>
+  );
+}
+
+const formatAmount = (amount: number, currency = "INR") =>
+  currency === "INR"
+    ? `₹${amount.toLocaleString("en-IN")}`
+    : `${currency} ${amount.toLocaleString("en-IN")}`;
+
 function Dashboard({ onNavigate }: { onNavigate: (module: ModuleKey) => void }) {
   const statIcons = [
     Users,
@@ -284,6 +323,8 @@ function Dashboard({ onNavigate }: { onNavigate: (module: ModuleKey) => void }) 
     CircleDollarSign,
     CalendarClock,
   ];
+  const { data: dashboard, loading, error, reload } = useDashboard();
+
   return (
     <div className="workspace-rise">
       <PageHeader
@@ -292,133 +333,160 @@ function Dashboard({ onNavigate }: { onNavigate: (module: ModuleKey) => void }) 
         action="Add student"
         onAction={() => onNavigate("students")}
       />
-      <div className="mb-6 grid grid-cols-2 gap-3 xl:grid-cols-4">
-        {dashboardData.stats.map((stat, index) => {
-          const Icon = statIcons[index] ?? BarChart3;
-          return (
-            <Card key={stat.label} className="workspace-glass shadow-none">
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between">
-                  <div className="rounded-md bg-secondary p-2 text-brand">
-                    <Icon className="h-4 w-4" />
-                  </div>
-                  <ArrowUpRight className="h-4 w-4 text-muted-foreground" />
+      {!dashboard ? (
+        <Card className="workspace-glass shadow-none">
+          {error ? (
+            <ErrorState message={error.message} onRetry={reload} />
+          ) : (
+            <LoadingState label={loading ? "Loading dashboard..." : "No dashboard data"} />
+          )}
+        </Card>
+      ) : (
+        <>
+          <div className="mb-6 grid grid-cols-2 gap-3 xl:grid-cols-4">
+            {dashboard.stats.map((stat, index) => {
+              const Icon = statIcons[index] ?? BarChart3;
+              return (
+                <Card key={stat.label} className="workspace-glass shadow-none">
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between">
+                      <div className="rounded-md bg-secondary p-2 text-brand">
+                        <Icon className="h-4 w-4" />
+                      </div>
+                      <ArrowUpRight className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                    <p className="mt-4 text-2xl font-semibold tracking-tight">{stat.value}</p>
+                    <p className="mt-1 text-xs font-medium text-muted-foreground">{stat.label}</p>
+                    <p className="mt-2 text-[11px] text-muted-foreground">{stat.detail}</p>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+          <div className="grid gap-5 xl:grid-cols-[1.4fr_1fr]">
+            <Card className="workspace-glass shadow-none">
+              <CardHeader className="flex-row items-center justify-between pb-3">
+                <div>
+                  <CardTitle className="text-base">Application pipeline</CardTitle>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Students moving through the journey
+                  </p>
                 </div>
-                <p className="mt-4 text-2xl font-semibold tracking-tight">{stat.value}</p>
-                <p className="mt-1 text-xs font-medium text-muted-foreground">{stat.label}</p>
-                <p className="mt-2 text-[11px] text-muted-foreground">{stat.detail}</p>
+                <Button variant="ghost" size="sm" onClick={() => onNavigate("applications")}>
+                  View applications <ChevronRight />
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {dashboard.pipeline.map((stage, index) => (
+                    <div key={stage.label}>
+                      <div className="mb-1.5 flex items-center justify-between text-xs">
+                        <span className="font-medium">{stage.label}</span>
+                        <span className="text-muted-foreground">{stage.count}</span>
+                      </div>
+                      <div className="h-2 rounded-full bg-secondary">
+                        <div
+                          className={`h-full rounded-full ${stage.state === "active" ? "bg-primary" : stage.state === "complete" ? "bg-success" : "bg-info/50"}`}
+                          style={{ width: `${Math.max(18, 100 - index * 13)}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </CardContent>
             </Card>
-          );
-        })}
-      </div>
-      <div className="grid gap-5 xl:grid-cols-[1.4fr_1fr]">
-        <Card className="workspace-glass shadow-none">
-          <CardHeader className="flex-row items-center justify-between pb-3">
-            <div>
-              <CardTitle className="text-base">Application pipeline</CardTitle>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Students moving through the journey
-              </p>
-            </div>
-            <Button variant="ghost" size="sm" onClick={() => onNavigate("applications")}>
-              View applications <ChevronRight />
-            </Button>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {dashboardData.pipeline.map((stage, index) => (
-                <div key={stage.label}>
-                  <div className="mb-1.5 flex items-center justify-between text-xs">
-                    <span className="font-medium">{stage.label}</span>
-                    <span className="text-muted-foreground">{stage.count}</span>
-                  </div>
-                  <div className="h-2 rounded-full bg-secondary">
-                    <div
-                      className={`h-full rounded-full ${stage.state === "active" ? "bg-primary" : stage.state === "complete" ? "bg-success" : "bg-info/50"}`}
-                      style={{ width: `${Math.max(18, 100 - index * 13)}%` }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="workspace-glass shadow-none">
-          <CardHeader className="flex-row items-center justify-between pb-3">
-            <div>
-              <CardTitle className="text-base">Upcoming deadlines</CardTitle>
-              <p className="mt-1 text-xs text-muted-foreground">
-                The next actions needing attention
-              </p>
-            </div>
-            <Button variant="ghost" size="icon" onClick={() => onNavigate("applications")}>
-              <ArrowUpRight />
-            </Button>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {dashboardData.deadlines.map((item) => (
-              <div
-                key={item.title}
-                className="flex gap-3 rounded-lg border border-line/60 bg-background/50 p-3"
-              >
-                <div
-                  className={`flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-md ${item.tone === "danger" ? "bg-danger/15 text-danger-foreground" : item.tone === "warning" ? "bg-warning/20 text-warning-foreground" : "bg-info/15 text-info-foreground"}`}
-                >
-                  <span className="text-base font-semibold leading-none">{item.date}</span>
-                  <span className="mt-1 text-[9px] font-semibold">{item.month}</span>
-                </div>
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">{item.title}</p>
-                  <p className="mt-1 truncate text-xs text-muted-foreground">{item.detail}</p>
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
-      <div className="mt-5 grid gap-5 lg:grid-cols-[1.2fr_1fr]">
-        <Card className="workspace-glass shadow-none">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Recent activity</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {dashboardData.activities.map((activity) => (
-              <div key={activity.title} className="flex gap-3">
-                <div
-                  className={`mt-1 h-2.5 w-2.5 rounded-full ${activity.tone === "success" ? "bg-success" : activity.tone === "warning" ? "bg-warning" : "bg-brand"}`}
-                />
+            <Card className="workspace-glass shadow-none">
+              <CardHeader className="flex-row items-center justify-between pb-3">
                 <div>
-                  <p className="text-sm font-medium">{activity.title}</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">{activity.detail}</p>
+                  <CardTitle className="text-base">Upcoming deadlines</CardTitle>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    The next actions needing attention
+                  </p>
                 </div>
-                <span className="ml-auto text-[11px] text-muted-foreground">Today</span>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-        <Card className="workspace-glass shadow-none">
-          <CardHeader className="flex-row items-center justify-between pb-3">
-            <CardTitle className="text-base">Destination mix</CardTitle>
-            <Button variant="ghost" size="sm" onClick={() => onNavigate("reports")}>
-              Reports <ChevronRight />
-            </Button>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {dashboardData.countryMix.map((item) => (
-              <div key={item.country}>
-                <div className="mb-1 flex justify-between text-xs">
-                  <span>{item.country}</span>
-                  <span className="font-medium">{item.count} students</span>
-                </div>
-                <div className="h-1.5 rounded-full bg-secondary">
-                  <div className="h-full rounded-full bg-primary" style={{ width: item.width }} />
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
+                <Button variant="ghost" size="icon" onClick={() => onNavigate("applications")}>
+                  <ArrowUpRight />
+                </Button>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {dashboard.deadlines.map((item) => (
+                  <div
+                    key={item.title}
+                    className="flex gap-3 rounded-lg border border-line/60 bg-background/50 p-3"
+                  >
+                    <div
+                      className={`flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-md ${item.tone === "danger" ? "bg-danger/15 text-danger-foreground" : item.tone === "warning" ? "bg-warning/20 text-warning-foreground" : "bg-info/15 text-info-foreground"}`}
+                    >
+                      <span className="text-base font-semibold leading-none">{item.date}</span>
+                      <span className="mt-1 text-[9px] font-semibold">{item.month}</span>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{item.title}</p>
+                      <p className="mt-1 truncate text-xs text-muted-foreground">{item.detail}</p>
+                    </div>
+                  </div>
+                ))}
+                {dashboard.deadlines.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No upcoming dated deadlines.</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+          <div className="mt-5 grid gap-5 lg:grid-cols-[1.2fr_1fr]">
+            <Card className="workspace-glass shadow-none">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Recent activity</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {dashboard.activities.map((activity) => (
+                  <div key={activity.title} className="flex gap-3">
+                    <div
+                      className={`mt-1 h-2.5 w-2.5 rounded-full ${activity.tone === "success" ? "bg-success" : activity.tone === "warning" ? "bg-warning" : "bg-brand"}`}
+                    />
+                    <div>
+                      <p className="text-sm font-medium">{activity.title}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">{activity.detail}</p>
+                    </div>
+                  </div>
+                ))}
+                {dashboard.activities.length === 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    No recent application or payment activity.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+            <Card className="workspace-glass shadow-none">
+              <CardHeader className="flex-row items-center justify-between pb-3">
+                <CardTitle className="text-base">Destination mix</CardTitle>
+                <Button variant="ghost" size="sm" onClick={() => onNavigate("reports")}>
+                  Reports <ChevronRight />
+                </Button>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {dashboard.countryMix.map((item) => (
+                  <div key={item.country}>
+                    <div className="mb-1 flex justify-between text-xs">
+                      <span>{item.country}</span>
+                      <span className="font-medium">{item.count} students</span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-secondary">
+                      <div
+                        className="h-full rounded-full bg-primary"
+                        style={{ width: item.width }}
+                      />
+                    </div>
+                  </div>
+                ))}
+                {dashboard.countryMix.length === 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    No preferred countries recorded yet.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -532,7 +600,13 @@ function StudentsModule() {
       .toUpperCase();
 
     const newStudent: Student = {
-      id: `SS-2026-${String(students.length + 1).padStart(4, "0")}`,
+      // Next number after the highest existing SS-2026 id (count-based ids collide after deletes)
+      id: `SS-2026-${String(
+        Math.max(
+          0,
+          ...students.map((student) => Number(student.id.match(/^SS-2026-(\d+)$/)?.[1] ?? 0)),
+        ) + 1,
+      ).padStart(4, "0")}`,
       name: name.trim(),
       initials,
       email: email.trim() || "new.student@example.com",
@@ -1106,7 +1180,8 @@ function PipelinesModule() {
   const services = Object.keys(pipelineDefinitions) as ServiceType[];
   const [service, setService] = useState<ServiceType>(services[0] ?? "Study Abroad");
   const definition = pipelineDefinitions[service];
-  const serviceStudents = mockStudents.filter((student) => student.service === service);
+  const { data: students, loading, error, reload } = useStudents();
+  const serviceStudents = (students ?? []).filter((student) => student.service === service);
 
   return (
     <div className="workspace-rise">
@@ -1126,50 +1201,94 @@ function PipelinesModule() {
           </Button>
         ))}
       </div>
-      <div className="overflow-x-auto pb-3">
-        <div className="flex min-w-[980px] gap-3">
-          {definition.stages.map((stage, index) => {
-            const cards = serviceStudents.filter(
-              (student) =>
-                student.stage === stage ||
-                (index === 0 && !definition.stages.includes(student.stage)),
-            );
-            return (
-              <div
-                key={stage}
-                className="w-48 shrink-0 rounded-lg border border-line/60 bg-secondary/35 p-3"
-              >
-                <div className="mb-3 flex items-center justify-between gap-2">
-                  <p className="text-xs font-semibold">{stage}</p>
-                  <span className="text-[11px] text-muted-foreground">{cards.length}</span>
-                </div>
-                <div className="space-y-2">
-                  {cards.map((student) => (
-                    <div
-                      key={student.id}
-                      className="rounded-md border border-line/60 bg-card p-3 shadow-sm"
-                    >
-                      <p className="text-sm font-medium">{student.name}</p>
-                      <p className="mt-1 truncate text-[11px] text-muted-foreground">
-                        {student.desiredCourse} · {student.city}
+      {error ? (
+        <Card className="shadow-none">
+          <ErrorState message={error.message} onRetry={reload} />
+        </Card>
+      ) : loading ? (
+        <Card className="shadow-none">
+          <LoadingState label="Loading students..." />
+        </Card>
+      ) : (
+        <div className="overflow-x-auto pb-3">
+          <div className="flex min-w-[980px] gap-3">
+            {definition.stages.map((stage, index) => {
+              const cards = serviceStudents.filter(
+                (student) =>
+                  student.stage === stage ||
+                  (index === 0 && !definition.stages.includes(student.stage)),
+              );
+              return (
+                <div
+                  key={stage}
+                  className="w-48 shrink-0 rounded-lg border border-line/60 bg-secondary/35 p-3"
+                >
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <p className="text-xs font-semibold">{stage}</p>
+                    <span className="text-[11px] text-muted-foreground">{cards.length}</span>
+                  </div>
+                  <div className="space-y-2">
+                    {cards.map((student) => (
+                      <div
+                        key={student.id}
+                        className="rounded-md border border-line/60 bg-card p-3 shadow-sm"
+                      >
+                        <p className="text-sm font-medium">{student.name}</p>
+                        <p className="mt-1 truncate text-[11px] text-muted-foreground">
+                          {student.desiredCourse} · {student.city}
+                        </p>
+                        <p className="mt-2 text-[10px] text-muted-foreground">
+                          {student.counsellor}
+                        </p>
+                      </div>
+                    ))}
+                    {cards.length === 0 && (
+                      <p className="py-4 text-center text-[11px] text-muted-foreground">
+                        No students
                       </p>
-                      <p className="mt-2 text-[10px] text-muted-foreground">{student.counsellor}</p>
-                    </div>
-                  ))}
-                  {cards.length === 0 && (
-                    <p className="py-4 text-center text-[11px] text-muted-foreground">
-                      No students
-                    </p>
-                  )}
+                    )}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
+
+type RecordLists = {
+  courses: Course[];
+  applications: Application[];
+  documents: DocumentRecord[];
+  visa: VisaCase[];
+  payments: Payment[];
+  "follow-ups": FollowUp[];
+};
+
+type RecordKey = keyof RecordLists;
+
+const RECORD_KEYS: RecordKey[] = [
+  "courses",
+  "applications",
+  "documents",
+  "visa",
+  "payments",
+  "follow-ups",
+];
+
+const isRecordKey = (module: string): module is RecordKey =>
+  RECORD_KEYS.some((key) => key === module);
+
+const emptyRecords: RecordLists = {
+  courses: [],
+  applications: [],
+  documents: [],
+  visa: [],
+  payments: [],
+  "follow-ups": [],
+};
 
 function RecordsModule({
   module,
@@ -1186,6 +1305,55 @@ function RecordsModule({
   const [addingUniversity, setAddingUniversity] = useState(false);
 
   const [universityForm, setUniversityForm] = useState<Partial<University>>({});
+
+  const [records, setRecords] = useState<RecordLists>(emptyRecords);
+  const [recordsLoading, setRecordsLoading] = useState(false);
+  const [recordsError, setRecordsError] = useState<string | null>(null);
+
+  const loadRecords = async (key: RecordKey) => {
+    setRecordsLoading(true);
+    setRecordsError(null);
+
+    try {
+      switch (key) {
+        case "courses": {
+          const data = await courseService.getCourses();
+          setRecords((current) => ({ ...current, courses: data }));
+          break;
+        }
+        case "applications": {
+          const data = await applicationService.getApplications();
+          setRecords((current) => ({ ...current, applications: data }));
+          break;
+        }
+        case "documents": {
+          const data = await documentService.getDocuments();
+          setRecords((current) => ({ ...current, documents: data }));
+          break;
+        }
+        case "visa": {
+          const data = await visaService.getVisaCases();
+          setRecords((current) => ({ ...current, visa: data }));
+          break;
+        }
+        case "payments": {
+          const data = await paymentService.getPayments();
+          setRecords((current) => ({ ...current, payments: data }));
+          break;
+        }
+        case "follow-ups": {
+          const data = await followupService.getFollowUps();
+          setRecords((current) => ({ ...current, "follow-ups": data }));
+          break;
+        }
+      }
+    } catch (error) {
+      console.error(`Failed to load ${key}:`, error);
+      setRecordsError(error instanceof Error ? error.message : "Unable to load records");
+    } finally {
+      setRecordsLoading(false);
+    }
+  };
 
   const openAddUniversity = () => {
     setUniversityForm({
@@ -1248,58 +1416,51 @@ function RecordsModule({
   };
 
   const saveUniversity = async () => {
-  try {
-    if (!universityForm.name?.trim()) {
-      alert("University name is required");
-      return;
-    }
+    try {
+      if (!universityForm.name?.trim()) {
+        alert("University name is required");
+        return;
+      }
 
-    console.log("University payload:", universityForm);
+      console.log("University payload:", universityForm);
 
-    if (addingUniversity) {
-      const newUniversity = await universityService.createUniversity(
-        universityForm as University,
-      );
+      if (addingUniversity) {
+        const newUniversity = await universityService.createUniversity(
+          universityForm as University,
+        );
 
-      setUniversities((current) => [newUniversity, ...current]);
+        setUniversities((current) => [newUniversity, ...current]);
 
-      setAddingUniversity(false);
+        setAddingUniversity(false);
 
-      alert("University added successfully");
+        alert("University added successfully");
 
-      return;
-    }
+        return;
+      }
 
-    if (editingUniversity && selectedUniversity) {
-      const updatedUniversity =
-        await universityService.updateUniversity(
+      if (editingUniversity && selectedUniversity) {
+        const updatedUniversity = await universityService.updateUniversity(
           selectedUniversity.id,
           universityForm,
         );
 
-      setUniversities((current) =>
-        current.map((university) =>
-          university.id === selectedUniversity.id
-            ? updatedUniversity
-            : university,
-        ),
-      );
+        setUniversities((current) =>
+          current.map((university) =>
+            university.id === selectedUniversity.id ? updatedUniversity : university,
+          ),
+        );
 
-      setSelectedUniversity(updatedUniversity);
-      setEditingUniversity(false);
+        setSelectedUniversity(updatedUniversity);
+        setEditingUniversity(false);
 
-      alert("University updated successfully");
+        alert("University updated successfully");
+      }
+    } catch (error) {
+      console.error("Failed to save university:", error);
+
+      alert(error instanceof Error ? error.message : "Failed to save university");
     }
-  } catch (error) {
-    console.error("Failed to save university:", error);
-
-    alert(
-      error instanceof Error
-        ? error.message
-        : "Failed to save university",
-    );
-  }
-};
+  };
 
   const config = {
     universities: {
@@ -1372,18 +1533,27 @@ function RecordsModule({
   }[module];
 
   const loadUniversities = async () => {
+    setRecordsLoading(true);
+    setRecordsError(null);
+
     try {
       const data = await universityService.getUniversities();
       setUniversities(data);
     } catch (error) {
       console.error("Failed to load universities:", error);
+      setRecordsError(error instanceof Error ? error.message : "Unable to load universities");
+    } finally {
+      setRecordsLoading(false);
     }
   };
 
-  useEffect(() => {
-    if (module !== "universities") return;
+  const reloadCurrent = () => {
+    if (module === "universities") loadUniversities();
+    else if (isRecordKey(module)) loadRecords(module);
+  };
 
-    loadUniversities();
+  useEffect(() => {
+    reloadCurrent();
   }, [module]);
 
   const query = search.toLowerCase();
@@ -1435,7 +1605,7 @@ function RecordsModule({
             </tr>
           ))
       : module === "courses"
-        ? mockCourses
+        ? records.courses
             .filter(
               (item) =>
                 `${item.name} ${item.country} ${item.specialization}`
@@ -1460,7 +1630,7 @@ function RecordsModule({
               </tr>
             ))
         : module === "applications"
-          ? mockApplications
+          ? records.applications
               .filter(
                 (item) =>
                   `${item.student} ${item.university} ${item.course}`
@@ -1483,7 +1653,7 @@ function RecordsModule({
                 </tr>
               ))
           : module === "documents"
-            ? mockDocuments
+            ? records.documents
                 .filter(
                   (item) =>
                     `${item.student} ${item.type}`.toLowerCase().includes(query) &&
@@ -1512,7 +1682,7 @@ function RecordsModule({
                   </tr>
                 ))
             : module === "visa"
-              ? mockVisaCases
+              ? records.visa
                   .filter(
                     (item) =>
                       `${item.student} ${item.country} ${item.university}`
@@ -1539,7 +1709,7 @@ function RecordsModule({
                     </tr>
                   ))
               : module === "payments"
-                ? mockPayments
+                ? records.payments
                     .filter(
                       (item) =>
                         `${item.student} ${item.paymentType}`.toLowerCase().includes(query) &&
@@ -1552,16 +1722,18 @@ function RecordsModule({
                           <p className="text-xs text-muted-foreground">{item.paymentType}</p>
                         </td>
                         <td className="px-5 py-3 font-medium">
-                          ₹{item.amount.toLocaleString("en-IN")}
+                          {formatAmount(item.amount, item.currency)}
                         </td>
-                        <td className="px-5 py-3">₹{item.paidAmount.toLocaleString("en-IN")}</td>
+                        <td className="px-5 py-3">
+                          {formatAmount(item.paidAmount, item.currency)}
+                        </td>
                         <td className="px-5 py-3">
                           <StatusBadge>{item.status}</StatusBadge>
                         </td>
                         <td className="px-5 py-3 text-muted-foreground">{item.dueDate}</td>
                       </tr>
                     ))
-                : mockFollowUps
+                : records["follow-ups"]
                     .filter(
                       (item) =>
                         `${item.student} ${item.type} ${item.counsellor}`
@@ -1633,11 +1805,27 @@ function RecordsModule({
             </thead>
             <tbody className="divide-y divide-line/60">{rows}</tbody>
           </table>
-          {rows.length === 0 && (
-            <EmptyState
-              title="No matching records"
-              description="Try changing the search or status filter."
-            />
+          {recordsError ? (
+            <ErrorState message={recordsError} onRetry={reloadCurrent} />
+          ) : recordsLoading ? (
+            <LoadingState />
+          ) : (
+            rows.length === 0 &&
+            ((module === "universities"
+              ? universities.length
+              : isRecordKey(module)
+                ? records[module].length
+                : 0) === 0 ? (
+              <EmptyState
+                title="No records yet"
+                description="There are no records for this module in the database yet."
+              />
+            ) : (
+              <EmptyState
+                title="No matching records"
+                description="Try changing the search or status filter."
+              />
+            ))
           )}
         </div>
       </Card>
@@ -1834,8 +2022,6 @@ function RecordsModule({
                 placeholder="15 January"
               />
             </label>
-
-            
 
             {/* Popular Courses */}
             <label className="grid gap-1.5 text-sm font-medium sm:col-span-2">
@@ -2113,17 +2299,12 @@ function RecordsModule({
             {/* Difficulty */}
             <label className="grid gap-1.5 text-sm font-medium">
               Difficulty
-
               <select
                 value={universityForm.difficulty ?? "Medium"}
                 onChange={(event) =>
                   setUniversityForm({
                     ...universityForm,
-                    difficulty: event.target.value as
-                      | "Easy"
-                      | "Medium"
-                      | "Hard"
-                      | "Very Hard",
+                    difficulty: event.target.value as "Easy" | "Medium" | "Hard" | "Very Hard",
                   })
                 }
                 className="h-9 rounded-md border border-input bg-background px-3 text-sm"
@@ -2312,164 +2493,275 @@ function RecordsModule({
 }
 
 function AssessmentModule() {
+  const {
+    data: students,
+    loading: studentsLoading,
+    error: studentsError,
+    reload: reloadStudents,
+  } = useStudents();
+
+  const [studentId, setStudentId] = useState("");
+  const [assessment, setAssessment] = useState<AssessmentResult | null>(null);
+  const [assessing, setAssessing] = useState(false);
+  const [assessmentError, setAssessmentError] = useState<string | null>(null);
+
+  const student = students?.find((item) => item.id === studentId) ?? students?.[0];
+
+  const runAssessment = async (target: Student) => {
+    setAssessing(true);
+    setAssessmentError(null);
+
+    try {
+      setAssessment(await assessmentService.assessStudent(target));
+    } catch (error) {
+      console.error("Failed to run assessment:", error);
+      setAssessment(null);
+      setAssessmentError(error instanceof Error ? error.message : "Unable to run the assessment");
+    } finally {
+      setAssessing(false);
+    }
+  };
+
+  useEffect(() => {
+    if (student) runAssessment(student);
+  }, [student?.id]);
+
   return (
     <div className="workspace-rise">
       <PageHeader
         title="Profile assessment"
-        description="Counsellor-ready recommendations for Rahul Sharma."
-        action="Run assessment"
+        description={
+          student
+            ? `Counsellor-ready recommendations for ${student.name}.`
+            : "Counsellor-ready recommendations from the student profile."
+        }
+        action={student ? "Run assessment" : undefined}
+        onAction={student ? () => runAssessment(student) : undefined}
+        extraActions={
+          students && students.length > 0 ? (
+            <select
+              value={student?.id ?? ""}
+              onChange={(event) => setStudentId(event.target.value)}
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+              aria-label="Student"
+            >
+              {students.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
+            </select>
+          ) : undefined
+        }
       />
-      <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
-        <Card className="workspace-glass shadow-none">
-          <CardHeader>
-            <CardTitle className="text-base">Assessment summary</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm leading-6 text-muted-foreground">{mockAssessment.summary}</p>
-            <div className="mt-6 grid gap-5 sm:grid-cols-2">
-              <div>
-                <h3 className="mb-3 text-sm font-semibold">What is working</h3>
-                <ul className="space-y-2">
-                  {mockAssessment.requirements.map((item) => (
-                    <li key={item} className="flex gap-2 text-sm text-muted-foreground">
-                      <Check className="mt-0.5 h-4 w-4 shrink-0 text-success" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div>
-                <h3 className="mb-3 text-sm font-semibold">Review before shortlist</h3>
-                <ul className="space-y-2">
-                  {mockAssessment.issues.map((item) => (
-                    <li key={item} className="flex gap-2 text-sm text-muted-foreground">
-                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-warning-foreground" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      {studentsError ? (
         <Card className="shadow-none">
-          <CardHeader>
-            <CardTitle className="text-base">Missing documents</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {mockAssessment.missing.map((item) => (
-              <div
-                key={item}
-                className="flex items-center justify-between rounded-md border border-line/60 bg-secondary/40 p-3 text-sm"
-              >
-                <span>{item}</span>
-                <Badge variant="outline" className="bg-warning/20 text-warning-foreground">
-                  Pending
-                </Badge>
-              </div>
-            ))}
-            <Button className="mt-2 w-full" variant="outline">
-              Request documents
-            </Button>
-          </CardContent>
+          <ErrorState message={studentsError.message} onRetry={reloadStudents} />
         </Card>
-      </div>
-      <Card className="mt-5 shadow-none">
-        <CardHeader>
-          <CardTitle className="text-base">University matches</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-3 md:grid-cols-3">
-            {mockAssessment.matches.map((match) => (
-              <div
-                key={match.university}
-                className="rounded-lg border border-line/60 bg-secondary/30 p-4"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <p className="font-medium">{match.university}</p>
-                  <ArrowUpRight className="h-4 w-4 text-muted-foreground" />
+      ) : studentsLoading ? (
+        <Card className="shadow-none">
+          <LoadingState label="Loading students..." />
+        </Card>
+      ) : !student ? (
+        <Card className="shadow-none">
+          <EmptyState
+            title="No students yet"
+            description="Add a student to run a profile assessment."
+          />
+        </Card>
+      ) : assessmentError ? (
+        <Card className="shadow-none">
+          <ErrorState message={assessmentError} onRetry={() => runAssessment(student)} />
+        </Card>
+      ) : assessing || !assessment ? (
+        <Card className="shadow-none">
+          <LoadingState label="Running assessment..." />
+        </Card>
+      ) : (
+        <>
+          <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
+            <Card className="workspace-glass shadow-none">
+              <CardHeader>
+                <CardTitle className="text-base">Assessment summary</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm leading-6 text-muted-foreground">{assessment.summary}</p>
+                <div className="mt-6 grid gap-5 sm:grid-cols-2">
+                  <div>
+                    <h3 className="mb-3 text-sm font-semibold">What is working</h3>
+                    <ul className="space-y-2">
+                      {assessment.requirements.map((item) => (
+                        <li key={item} className="flex gap-2 text-sm text-muted-foreground">
+                          <Check className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+                          {item}
+                        </li>
+                      ))}
+                      {assessment.requirements.length === 0 && (
+                        <li className="text-sm text-muted-foreground">No matching criteria yet.</li>
+                      )}
+                    </ul>
+                  </div>
+                  <div>
+                    <h3 className="mb-3 text-sm font-semibold">Review before shortlist</h3>
+                    <ul className="space-y-2">
+                      {assessment.issues.map((item) => (
+                        <li key={item} className="flex gap-2 text-sm text-muted-foreground">
+                          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-warning-foreground" />
+                          {item}
+                        </li>
+                      ))}
+                      {assessment.issues.length === 0 && (
+                        <li className="text-sm text-muted-foreground">Nothing to review.</li>
+                      )}
+                    </ul>
+                  </div>
                 </div>
-                <p className="mt-2 text-xs text-muted-foreground">{match.course}</p>
-                <div className="mt-4">
-                  <StatusBadge>{match.status}</StatusBadge>
-                </div>
-                <p className="mt-3 text-xs text-muted-foreground">No additional review notes.</p>
-                <Button variant="ghost" size="sm" className="mt-2 px-0">
-                  {match.action} <ChevronRight />
+              </CardContent>
+            </Card>
+            <Card className="shadow-none">
+              <CardHeader>
+                <CardTitle className="text-base">Missing documents</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {assessment.missing.map((item) => (
+                  <div
+                    key={item}
+                    className="flex items-center justify-between rounded-md border border-line/60 bg-secondary/40 p-3 text-sm"
+                  >
+                    <span>{item}</span>
+                    <Badge variant="outline" className="bg-warning/20 text-warning-foreground">
+                      Pending
+                    </Badge>
+                  </div>
+                ))}
+                {assessment.missing.length === 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    No pending or rejected documents on record for this student.
+                  </p>
+                )}
+                <Button className="mt-2 w-full" variant="outline">
+                  Request documents
                 </Button>
-              </div>
-            ))}
+              </CardContent>
+            </Card>
           </div>
-        </CardContent>
-      </Card>
+          <Card className="mt-5 shadow-none">
+            <CardHeader>
+              <CardTitle className="text-base">University matches</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-3 md:grid-cols-3">
+                {assessment.matches.map((match) => (
+                  <div
+                    key={match.university}
+                    className="rounded-lg border border-line/60 bg-secondary/30 p-4"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="font-medium">{match.university}</p>
+                      <ArrowUpRight className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                    <p className="mt-2 text-xs text-muted-foreground">{match.course}</p>
+                    <div className="mt-4">
+                      <StatusBadge>{match.status}</StatusBadge>
+                    </div>
+                    <p className="mt-3 text-xs text-muted-foreground">
+                      {match.issue || "No additional review notes."}
+                    </p>
+                    <Button variant="ghost" size="sm" className="mt-2 px-0">
+                      {match.action} <ChevronRight />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+              {assessment.matches.length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  No university lists a course matching this student's profile.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </>
+      )}
     </div>
   );
 }
 
 function ReportsModule() {
+  const { data: dashboard, loading, error, reload } = useDashboard();
+
   return (
     <div className="workspace-rise">
       <PageHeader
         title="Reports"
         description="Simple operating signals for the counselling team."
       />
-      <div className="grid gap-5 md:grid-cols-3">
+      {!dashboard ? (
         <Card className="shadow-none">
-          <CardContent className="p-5">
-            <p className="text-xs text-muted-foreground">Active students</p>
-            <p className="mt-2 text-3xl font-semibold">
-              {mockStudents.filter((student) => student.status === "Active").length}
-            </p>
-            <p className="mt-2 text-xs text-success-foreground">
-              Across {new Set(mockStudents.map((student) => student.service)).size} services
-            </p>
-          </CardContent>
+          {error ? (
+            <ErrorState message={error.message} onRetry={reload} />
+          ) : (
+            <LoadingState label={loading ? "Loading reports..." : "No report data"} />
+          )}
         </Card>
-        <Card className="shadow-none">
-          <CardContent className="p-5">
-            <p className="text-xs text-muted-foreground">Applications in motion</p>
-            <p className="mt-2 text-3xl font-semibold">{mockApplications.length}</p>
-            <p className="mt-2 text-xs text-info-foreground">
-              {mockApplications.filter((item) => item.status === "Offer Received").length} offer
-              received
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="shadow-none">
-          <CardContent className="p-5">
-            <p className="text-xs text-muted-foreground">Outstanding payments</p>
-            <p className="mt-2 text-3xl font-semibold">
-              ₹
-              {mockPayments
-                .filter((item) => item.status !== "Paid")
-                .reduce((sum, item) => sum + item.amount - item.paidAmount, 0)
-                .toLocaleString("en-IN")}
-            </p>
-            <p className="mt-2 text-xs text-warning-foreground">Needs collection follow-up</p>
-          </CardContent>
-        </Card>
-      </div>
-      <Card className="mt-5 shadow-none">
-        <CardHeader>
-          <CardTitle className="text-base">Enquiry trend</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex h-56 items-end gap-2 border-b border-line/60 pb-0">
-            {dashboardData.enquiryTrend.map((point) => (
-              <div
-                key={point.label}
-                className="group flex flex-1 flex-col items-center justify-end gap-2"
-              >
-                <div
-                  className="w-full rounded-t-sm bg-primary/75 transition-colors group-hover:bg-primary"
-                  style={{ height: `${point.height}%` }}
-                />
-                <span className="text-[10px] text-muted-foreground">{point.label}</span>
-              </div>
-            ))}
+      ) : (
+        <>
+          <div className="grid gap-5 md:grid-cols-3">
+            <Card className="shadow-none">
+              <CardContent className="p-5">
+                <p className="text-xs text-muted-foreground">Active students</p>
+                <p className="mt-2 text-3xl font-semibold">{dashboard.reports.activeStudents}</p>
+                <p className="mt-2 text-xs text-success-foreground">
+                  Across {dashboard.reports.services} services
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="shadow-none">
+              <CardContent className="p-5">
+                <p className="text-xs text-muted-foreground">Applications in motion</p>
+                <p className="mt-2 text-3xl font-semibold">{dashboard.reports.applications}</p>
+                <p className="mt-2 text-xs text-info-foreground">
+                  {dashboard.reports.offers} offer received
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="shadow-none">
+              <CardContent className="p-5">
+                <p className="text-xs text-muted-foreground">Outstanding payments</p>
+                <p className="mt-2 text-3xl font-semibold">
+                  {dashboard.reports.outstanding.length
+                    ? dashboard.reports.outstanding
+                        .map((item) => formatAmount(item.amount, item.currency))
+                        .join(" + ")
+                    : formatAmount(0)}
+                </p>
+                <p className="mt-2 text-xs text-warning-foreground">Needs collection follow-up</p>
+              </CardContent>
+            </Card>
           </div>
-        </CardContent>
-      </Card>
+          <Card className="mt-5 shadow-none">
+            <CardHeader>
+              <CardTitle className="text-base">Enquiry trend</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex h-56 items-end gap-2 border-b border-line/60 pb-0">
+                {dashboard.enquiryTrend.map((point) => (
+                  <div
+                    key={point.label}
+                    className="group flex flex-1 flex-col items-center justify-end gap-2"
+                  >
+                    <div
+                      className="w-full rounded-t-sm bg-primary/75 transition-colors group-hover:bg-primary"
+                      style={{ height: `${point.height}%` }}
+                      title={point.count !== undefined ? `${point.count} new students` : undefined}
+                    />
+                    <span className="text-[10px] text-muted-foreground">{point.label}</span>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      )}
     </div>
   );
 }
@@ -2532,10 +2824,13 @@ function SettingsModule() {
               </div>
             </div>
             <div className="rounded-md border border-line/60 bg-secondary/40 p-4">
-              <p className="text-sm font-medium">Mock data mode</p>
+              <p className="text-sm font-medium">
+                {apiConfig.useMockData ? "Mock data mode" : "Connected to backend"}
+              </p>
               <p className="mt-1 text-xs text-muted-foreground">
-                The workspace is ready to connect to your Node.js and MongoDB services when they are
-                available.
+                {apiConfig.useMockData
+                  ? "Showing sample data. Set VITE_USE_MOCK_DATA=false to use the Node.js API and MongoDB."
+                  : `Data is loaded from the API at ${apiConfig.baseUrl} (MongoDB).`}
               </p>
             </div>
           </CardContent>
@@ -2549,6 +2844,21 @@ export function CrmWorkspace({ module }: { module: ModuleKey }) {
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const notifications = useNotifications();
+  const unreadNotifications = (notifications.data ?? []).filter((notice) => !notice.read);
+
+  const markNotificationsRead = async () => {
+    try {
+      await Promise.all(
+        unreadNotifications.map((notice) => notificationService.markRead(notice.id)),
+      );
+      notifications.reload();
+      setNotificationsOpen(false);
+    } catch (error) {
+      console.error("Failed to mark notifications as read:", error);
+      alert(error instanceof Error ? error.message : "Failed to mark notifications as read");
+    }
+  };
   const currentTitle =
     navigation.find((item) => item.key === module)?.label ??
     (module === "settings" ? "Settings" : "Overview");
@@ -2603,7 +2913,9 @@ export function CrmWorkspace({ module }: { module: ModuleKey }) {
                 onClick={() => setNotificationsOpen((open) => !open)}
               >
                 <Bell />
-                <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-danger" />
+                {unreadNotifications.length > 0 && (
+                  <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-danger" />
+                )}
               </Button>
               <div className="hidden h-8 w-8 items-center justify-center rounded-full bg-brand/15 text-xs font-semibold text-brand sm:flex">
                 MR
@@ -2614,18 +2926,43 @@ export function CrmWorkspace({ module }: { module: ModuleKey }) {
             <div className="absolute right-4 top-14 z-40 w-[min(360px,calc(100vw-2rem))] rounded-lg border border-line bg-card p-4 shadow-lg">
               <div className="mb-3 flex items-center justify-between">
                 <p className="font-semibold">Notifications</p>
-                <Button variant="ghost" size="sm" onClick={() => setNotificationsOpen(false)}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={unreadNotifications.length === 0}
+                  onClick={markNotificationsRead}
+                >
                   Mark read
                 </Button>
               </div>
               <div className="space-y-3">
-                {mockNotifications.slice(0, 4).map((notice) => (
+                {notifications.error && (
+                  <div className="text-sm text-danger-foreground">
+                    {notifications.error.message}{" "}
+                    <button type="button" className="underline" onClick={notifications.reload}>
+                      Retry
+                    </button>
+                  </div>
+                )}
+                {notifications.loading && (
+                  <p className="text-sm text-muted-foreground">Loading notifications...</p>
+                )}
+                {!notifications.loading &&
+                  !notifications.error &&
+                  notifications.data?.length === 0 && (
+                    <p className="text-sm text-muted-foreground">No notifications.</p>
+                  )}
+                {(notifications.data ?? []).slice(0, 4).map((notice) => (
                   <div key={notice.id} className="flex gap-3">
                     <div
                       className={`mt-1 h-2 w-2 rounded-full ${notice.tone === "warning" ? "bg-warning" : notice.tone === "success" ? "bg-success" : "bg-info"}`}
                     />
                     <div>
-                      <p className="text-sm font-medium">{notice.title}</p>
+                      <p
+                        className={`text-sm ${notice.read ? "text-muted-foreground" : "font-medium"}`}
+                      >
+                        {notice.title}
+                      </p>
                       <p className="text-xs text-muted-foreground">{notice.description}</p>
                       <p className="mt-1 text-[10px] text-muted-foreground">{notice.time}</p>
                     </div>
