@@ -1,7 +1,10 @@
 export const apiConfig = {
-  baseUrl: "https://edupath-navigator2.onrender.com/api",
+  baseUrl:
+    import.meta.env["VITE_API_BASE_URL"] ??
+    "https://edupath-navigator2.onrender.com/api",
 
-  useMockData: false,
+  useMockData:
+    (import.meta.env["VITE_USE_MOCK_DATA"] ?? "false") !== "false",
 };
 
 console.log("API BASE URL:", apiConfig.baseUrl);
@@ -35,4 +38,17 @@ export async function apiRequest<T>(
   }
 
   return data as T;
+}
+
+/** GET a binary file (e.g. an Excel template) from the API. */
+export async function apiDownload(path: string): Promise<Blob> {
+  const response = await fetch(`${apiConfig.baseUrl}${path}`);
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+
+    throw new Error(data?.message || `Download failed with status ${response.status}`);
+  }
+
+  return response.blob();
 }

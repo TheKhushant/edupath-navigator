@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { studentService, universityService } from "@/services/crmServices";
+import { UniversityImport } from "@/components/crm/UniversityImport";
 import { Textarea } from "@/components/ui/textarea";
 
 import {
@@ -217,11 +218,13 @@ function PageHeader({
   description,
   action,
   onAction,
+  extraActions,
 }: {
   title: string;
   description: string;
   action?: string | undefined;
   onAction?: (() => void) | undefined;
+  extraActions?: React.ReactNode;
 }) {
   const navigate = useNavigate();
 
@@ -244,6 +247,8 @@ function PageHeader({
           <GraduationCap />
           University Matcher
         </Button>
+
+        {extraActions}
 
         {action && onAction && (
           <Button onClick={onAction}>
@@ -1366,17 +1371,17 @@ function RecordsModule({
     },
   }[module];
 
+  const loadUniversities = async () => {
+    try {
+      const data = await universityService.getUniversities();
+      setUniversities(data);
+    } catch (error) {
+      console.error("Failed to load universities:", error);
+    }
+  };
+
   useEffect(() => {
     if (module !== "universities") return;
-
-    const loadUniversities = async () => {
-      try {
-        const data = await universityService.getUniversities();
-        setUniversities(data);
-      } catch (error) {
-        console.error("Failed to load universities:", error);
-      }
-    };
 
     loadUniversities();
   }, [module]);
@@ -1603,6 +1608,9 @@ function RecordsModule({
         description={config.description}
         action={config.action}
         onAction={module === "universities" ? openAddUniversity : undefined}
+        extraActions={
+          module === "universities" ? <UniversityImport onImported={loadUniversities} /> : undefined
+        }
       />
       <TableToolbar
         search={search}

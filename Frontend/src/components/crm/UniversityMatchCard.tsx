@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
 import type {
-  UniversityDifficulty,
+  MatchStatus,
   UniversityMatch,
 } from "@/types/crm";
 
@@ -22,18 +22,18 @@ interface UniversityMatchCardProps {
   match: UniversityMatch;
 }
 
-function difficultyClass(difficulty: UniversityDifficulty) {
-  switch (difficulty) {
-    case "Easy":
+function statusClass(status: MatchStatus) {
+  switch (status) {
+    case "Meets Published Requirements":
       return "bg-success/15 text-success-foreground border-success/25";
 
-    case "Medium":
+    case "Matching":
       return "bg-info/15 text-info-foreground border-info/25";
 
-    case "Hard":
+    case "Requirement Review Needed":
       return "bg-warning/20 text-warning-foreground border-warning/30";
 
-    case "Very Hard":
+    case "Review Required":
       return "bg-danger/15 text-danger-foreground border-danger/25";
 
     default:
@@ -42,10 +42,14 @@ function difficultyClass(difficulty: UniversityDifficulty) {
 }
 
 function formatMoney(
-  min: number,
-  max: number,
+  min: number | undefined,
+  max: number | undefined,
   currency: string
 ) {
+  if (min === undefined || max === undefined) {
+    return "Not available";
+  }
+
   const formatter = new Intl.NumberFormat("en-IN", {
     maximumFractionDigits: 0,
   });
@@ -77,15 +81,15 @@ export function UniversityMatchCard({
             <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
               <MapPin className="h-3.5 w-3.5" />
 
-              {match.country}
+              {[match.city, match.country].filter(Boolean).join(", ")}
             </div>
           </div>
 
           <Badge
             variant="outline"
-            className={difficultyClass(match.difficulty)}
+            className={statusClass(match.status)}
           >
-            {match.difficulty}
+            {match.status}
           </Badge>
         </div>
 
@@ -96,11 +100,11 @@ export function UniversityMatchCard({
           </p>
 
           <p className="mt-1 font-medium">
-            {match.course}
+            {match.matchedCourses.join(", ") || "No course match"}
           </p>
 
           <p className="mt-1 text-xs text-muted-foreground">
-            Common category: {match.canonicalCourse}
+            Major courses: {match.courses.join(", ") || "Not available"}
           </p>
         </div>
 
@@ -119,12 +123,12 @@ export function UniversityMatchCard({
               {formatMoney(
                 match.tuitionMin,
                 match.tuitionMax,
-                match.tuitionCurrency
+                "EUR"
               )}
             </p>
 
             <p className="text-[11px] text-muted-foreground">
-              Per {match.tuitionPeriod.toLowerCase()}
+              Per year
             </p>
           </div>
 
@@ -133,20 +137,16 @@ export function UniversityMatchCard({
               <Wallet className="h-4 w-4 text-brand" />
 
               <p className="text-xs font-medium">
-                Living Cost
+                Entry Requirements
               </p>
             </div>
 
             <p className="mt-2 text-sm font-semibold">
-              {formatMoney(
-                match.livingCostMin,
-                match.livingCostMax,
-                match.livingCostCurrency
-              )}
+              IELTS {match.englishRequirement || "not available"}
             </p>
 
             <p className="text-[11px] text-muted-foreground">
-              Per {match.livingCostPeriod.toLowerCase()}
+              Recommended Indian %: {match.recommendedIndianPercentage || "not available"}
             </p>
           </div>
         </div>
@@ -156,33 +156,33 @@ export function UniversityMatchCard({
           <div>
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <CalendarDays className="h-3.5 w-3.5" />
-              Intake
+              Application Opens
             </div>
 
             <p className="mt-1 text-sm font-medium">
-              {match.intake}
+              {match.applicationOpens || "Not available"}
             </p>
           </div>
 
           <div>
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <Clock3 className="h-3.5 w-3.5" />
-              Application Start
+              Deadline
             </div>
 
             <p className="mt-1 text-sm font-medium">
-              {match.applicationStartDate}
+              {match.applicationDeadline || "Not available"}
             </p>
           </div>
 
           <div>
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <CalendarDays className="h-3.5 w-3.5" />
-              Deadline
+              Other Requirements
             </div>
 
             <p className="mt-1 text-sm font-medium">
-              {match.applicationDeadline}
+              {match.requirements.join("; ") || "Not available"}
             </p>
           </div>
         </div>
@@ -239,11 +239,11 @@ export function UniversityMatchCard({
         <div className="mt-5 flex flex-col gap-3 border-t border-line/60 pt-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-              Last verified
+              Suggested action
             </p>
 
             <p className="mt-1 text-xs font-medium">
-              {match.lastVerified}
+              {match.action}
             </p>
           </div>
 

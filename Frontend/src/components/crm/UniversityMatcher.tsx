@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeft,
@@ -9,8 +9,10 @@ import {
   GraduationCap,
   MapPin,
   Search,
-  Wallet,
-  AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown,
+  AlertTriangle,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -26,26 +28,36 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 
-import { mockStudents } from "@/data/mockData";
-import { matchUniversities } from "@/services/universityMatcher";
+import { countryService, studentService, universityService } from "@/services/crmServices";
+import { isSheet2HeaderRow, matchUniversities } from "@/services/universityMatcher";
 import type {
+  Country,
+  LivingBudget,
+  MatchStatus,
   Student,
-  UniversityDifficulty,
+  University,
   UniversityMatch,
 } from "@/types/crm";
 
-function difficultyClass(difficulty: UniversityDifficulty) {
-  switch (difficulty) {
-    case "Easy":
+const MATCH_STATUSES: MatchStatus[] = [
+  "Meets Published Requirements",
+  "Matching",
+  "Requirement Review Needed",
+  "Review Required",
+];
+
+function statusClass(status: MatchStatus) {
+  switch (status) {
+    case "Meets Published Requirements":
       return "bg-success/15 text-success-foreground border-success/25";
 
-    case "Medium":
+    case "Matching":
       return "bg-info/15 text-info-foreground border-info/25";
 
-    case "Hard":
+    case "Requirement Review Needed":
       return "bg-warning/20 text-warning-foreground border-warning/30";
 
-    case "Very Hard":
+    case "Review Required":
       return "bg-danger/15 text-danger-foreground border-danger/25";
 
     default:
@@ -53,100 +65,123 @@ function difficultyClass(difficulty: UniversityDifficulty) {
   }
 }
 
-function formatMoney(
-  min: number,
-  max: number,
-  currency: string,
-  period: string,
-) {
+function formatLivingBudget(budget?: LivingBudget) {
+  if (!budget) return undefined;
+
+  const formatter = new Intl.NumberFormat("en-IN", {
+    maximumFractionDigits: 0,
+  });
+
+  const amount =
+    budget.min === budget.max
+      ? `${budget.currency} ${formatter.format(budget.min)}`
+      : `${budget.currency} ${formatter.format(budget.min)} – ${formatter.format(budget.max)}`;
+
+  return `${amount} / ${budget.period}`;
+}
+
+function formatTuition(min?: number, max?: number) {
+  if (min === undefined || max === undefined) return undefined;
+
   const formatter = new Intl.NumberFormat("en-IN", {
     maximumFractionDigits: 0,
   });
 
   const amount =
     min === max
-      ? `${currency} ${formatter.format(min)}`
-      : `${currency} ${formatter.format(min)} – ${formatter.format(max)}`;
+      ? `EUR ${formatter.format(min)}`
+      : `EUR ${formatter.format(min)} – ${formatter.format(max)}`;
 
-  return `${amount} / ${period}`;
+  return `${amount} / Year`;
 }
 
-function getBudgetFit(student: Student, match: UniversityMatch) {
-  const budget = Number(student.budget.replace(/[^\d]/g, ""));
-
-  if (!budget || !match.tuitionMax) {
-    return {
-      label: "Review",
-      className: "bg-secondary text-muted-foreground border-border",
-    };
-  }
-
-  if (match.tuitionMax <= budget) {
-    return {
-      label: "Within Budget",
-      className:
-        "bg-success/15 text-success-foreground border-success/25",
-    };
-  }
-
-  if (match.tuitionMin <= budget) {
-    return {
-      label: "Near Budget",
-      className:
-        "bg-warning/20 text-warning-foreground border-warning/30",
-    };
-  }
-
-  return {
-    label: "Above Budget",
-    className: "bg-danger/15 text-danger-foreground border-danger/25",
-  };
+/** The note after the range in Sheet2 tuition text, e.g. "(Semester contribution)". */
+function tuitionNote(annualTuitionFee?: string) {
+  return annualTuitionFee?.match(/\(([^)]*)\)/)?.[1];
 }
 
-function DetailItem({
-  label,
-  value,
-}: {
-  label: string;
-  value: React.ReactNode;
-}) {
+function DetailItem({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="rounded-lg border border-line/60 bg-secondary/30 p-3">
       <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
         {label}
       </p>
 
-      <p className="mt-1 text-sm font-medium text-foreground">
-        {value || "Not available"}
-      </p>
+      <p className="mt-1 text-sm font-medium text-foreground">{value || "Not available"}</p>
     </div>
   );
+}
+
+function profileFromStudent(student?: Student) {
+  return {
+    desiredCourse: student?.desiredCourse ?? "",
+    preferredCountries: student?.preferredCountries?.join(", ") ?? "",
+    budget: student?.budget ?? "",
+  };
 }
 
 export function UniversityMatcher() {
   const navigate = useNavigate();
 
-  const [selectedStudentId, setSelectedStudentId] = useState(
-    mockStudents[0]?.id ?? "",
-  );
+  const [students, setStudents] = useState<Student[]>([]);
+  const [universities, setUniversities] = useState<University[]>([]);
+  const [countries, setCountries] = useState<Country[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const [editableProfile, setEditableProfile] = useState({
-    desiredCourse: mockStudents[0]?.desiredCourse ?? "",
-    preferredCountries: mockStudents[0]?.preferredCountries.join(", ") ?? "",
-    budget: mockStudents[0]?.budget ?? "",
-  });
+  const [selectedStudentId, setSelectedStudentId] = useState("");
+
+  const [editableProfile, setEditableProfile] = useState(profileFromStudent());
 
   const [isProfileEditing, setIsProfileEditing] = useState(false);
 
   const [search, setSearch] = useState("");
   const [hasSearched, setHasSearched] = useState(false);
-  const [selectedMatch, setSelectedMatch] =
-    useState<UniversityMatch | null>(null);
+  const [selectedMatch, setSelectedMatch] = useState<UniversityMatch | null>(null);
+
+  const loadData = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
+
+    try {
+      const [studentData, universityData, countryData] = await Promise.all([
+        studentService.getStudents(),
+        universityService.getUniversities(),
+        countryService.getCountries(),
+      ]);
+
+      setStudents(studentData);
+      setUniversities(universityData);
+      setCountries(countryData);
+
+      const firstStudent = studentData[0];
+      setSelectedStudentId((current) =>
+        studentData.some((student) => student.id === current) ? current : (firstStudent?.id ?? ""),
+      );
+      setEditableProfile((current) =>
+        current.desiredCourse || current.preferredCountries || current.budget
+          ? current
+          : profileFromStudent(firstStudent),
+      );
+    } catch (error) {
+      console.error("Failed to load University Matcher data:", error);
+      setLoadError(error instanceof Error ? error.message : "Unable to load data");
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const universityCount = useMemo(
+    () => universities.filter((university) => !isSheet2HeaderRow(university)).length,
+    [universities],
+  );
 
   const selectedStudent = useMemo<Student | undefined>(() => {
-    const student = mockStudents.find(
-      (student) => student.id === selectedStudentId,
-    );
+    const student = students.find((student) => student.id === selectedStudentId);
 
     if (!student) return undefined;
 
@@ -159,26 +194,18 @@ export function UniversityMatcher() {
         .filter(Boolean),
       budget: editableProfile.budget,
     };
-  }, [selectedStudentId, editableProfile]);
+  }, [students, selectedStudentId, editableProfile]);
 
   const [countryFilter, setCountryFilter] = useState("All");
-  const [difficultyFilter, setDifficultyFilter] = useState("All");
-  const [budgetFilter, setBudgetFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
-  const [intakeFilter, setIntakeFilter] = useState("All");
+  const [opensFilter, setOpensFilter] = useState("All");
 
   const [sortConfig, setSortConfig] = useState<{
     key: string;
     direction: "asc" | "desc";
   } | null>(null);
 
-  const SortableHeader = ({
-    label,
-    sortKey,
-  }: {
-    label: string;
-    sortKey: string;
-  }) => {
+  const SortableHeader = ({ label, sortKey }: { label: string; sortKey: string }) => {
     const isActive = sortConfig?.key === sortKey;
 
     return (
@@ -201,8 +228,6 @@ export function UniversityMatcher() {
       </button>
     );
   };
-
-  
 
   const handleSort = (key: string) => {
     setSortConfig((current) => {
@@ -229,67 +254,41 @@ export function UniversityMatcher() {
       return [];
     }
 
-    return matchUniversities(selectedStudent);
-  }, [selectedStudent, hasSearched]);
+    return matchUniversities(selectedStudent, universities, countries);
+  }, [selectedStudent, universities, countries, hasSearched]);
 
   const filteredMatches = useMemo(() => {
     const query = search.toLowerCase().trim();
 
-    
-
     return matches.filter((match) => {
-      const budgetFit = getBudgetFit(selectedStudent!, match);
-
       const matchesSearch =
         !query ||
         match.university.toLowerCase().includes(query) ||
         match.country.toLowerCase().includes(query) ||
-        match.course.toLowerCase().includes(query) ||
-        match.canonicalCourse.toLowerCase().includes(query) ||
-        match.difficulty.toLowerCase().includes(query);
+        (match.city ?? "").toLowerCase().includes(query) ||
+        match.courses.some((course) => course.toLowerCase().includes(query));
 
-      const matchesCountry =
-        countryFilter === "All" ||
-        match.country === countryFilter;
+      const matchesCountry = countryFilter === "All" || match.country === countryFilter;
 
-      const matchesDifficulty =
-        difficultyFilter === "All" ||
-        match.difficulty === difficultyFilter;
+      const matchesStatus = statusFilter === "All" || match.status === statusFilter;
 
-      const matchesBudget =
-        budgetFilter === "All" ||
-        budgetFit.label === budgetFilter;
+      const matchesOpens = opensFilter === "All" || match.applicationOpens === opensFilter;
 
-      const matchesStatus =
-        statusFilter === "All" ||
-        match.status === statusFilter;
-
-      const matchesIntake =
-        intakeFilter === "All" ||
-        match.intake === intakeFilter;
-
-      return (
-        matchesSearch &&
-        matchesCountry &&
-        matchesDifficulty &&
-        matchesBudget &&
-        matchesStatus &&
-        matchesIntake
-      );
+      return matchesSearch && matchesCountry && matchesStatus && matchesOpens;
     });
-  }, [
-    matches,
-    search,
-    countryFilter,
-    difficultyFilter,
-    budgetFilter,
-    statusFilter,
-    intakeFilter,
-    selectedStudent,
-  ]);
+  }, [matches, search, countryFilter, statusFilter, opensFilter]);
+
+  const canSearch = !isLoading && !loadError && Boolean(selectedStudent);
 
   const handleSearch = () => {
     setHasSearched(true);
+  };
+
+  const handleSearchOnEnter = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter" && canSearch) {
+      event.preventDefault();
+      handleSearch();
+    }
   };
 
   const sortedMatches = useMemo(() => {
@@ -308,58 +307,57 @@ export function UniversityMatcher() {
           break;
 
         case "country":
-          valueA = a.country;
-          valueB = b.country;
+          valueA = `${a.country} ${a.city ?? ""}`;
+          valueB = `${b.country} ${b.city ?? ""}`;
           break;
 
         case "course":
-          valueA = a.course;
-          valueB = b.course;
+          valueA = a.matchedCourses.join(", ");
+          valueB = b.matchedCourses.join(", ");
           break;
 
         case "tuition":
-          valueA = a.tuitionMin;
-          valueB = b.tuitionMin;
+          valueA = a.tuitionMax ?? Number.MAX_SAFE_INTEGER;
+          valueB = b.tuitionMax ?? Number.MAX_SAFE_INTEGER;
           break;
 
-        case "budget":
-          valueA = getBudgetFit(selectedStudent!, a).label;
-          valueB = getBudgetFit(selectedStudent!, b).label;
+        case "living":
+          valueA = a.livingBudget?.min ?? Number.MAX_SAFE_INTEGER;
+          valueB = b.livingBudget?.min ?? Number.MAX_SAFE_INTEGER;
           break;
 
-        case "difficulty":
-          valueA = a.difficulty;
-          valueB = b.difficulty;
+        case "status":
+          valueA = MATCH_STATUSES.indexOf(a.status);
+          valueB = MATCH_STATUSES.indexOf(b.status);
           break;
 
-        case "intake":
-          valueA = a.intake;
-          valueB = b.intake;
+        case "ielts":
+          valueA = a.englishRequirement ?? "";
+          valueB = b.englishRequirement ?? "";
+          break;
+
+        case "percentage":
+          valueA = a.recommendedIndianPercentage ?? "";
+          valueB = b.recommendedIndianPercentage ?? "";
           break;
 
         case "deadline":
-          valueA = a.applicationDeadline;
-          valueB = b.applicationDeadline;
+          valueA = a.applicationDeadline ?? "";
+          valueB = b.applicationDeadline ?? "";
           break;
 
         default:
           return 0;
       }
 
-      const comparison = String(valueA).localeCompare(
-        String(valueB),
-        undefined,
-        {
-          numeric: true,
-          sensitivity: "base",
-        }
-      );
+      const comparison = String(valueA).localeCompare(String(valueB), undefined, {
+        numeric: true,
+        sensitivity: "base",
+      });
 
       return direction === "asc" ? comparison : -comparison;
     });
-  }, [filteredMatches, sortConfig, selectedStudent]);
-
-  
+  }, [filteredMatches, sortConfig]);
 
   return (
     <div className="min-h-screen bg-canvas p-4 sm:p-6 lg:p-8">
@@ -368,11 +366,7 @@ export function UniversityMatcher() {
         <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <div className="mb-2 flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => navigate({ to: "/" })}
-              >
+              <Button variant="ghost" size="sm" onClick={() => navigate({ to: "/" })}>
                 <ArrowLeft />
                 Back
               </Button>
@@ -400,21 +394,16 @@ export function UniversityMatcher() {
         <Card className="mb-5 shadow-none">
           <CardHeader className="border-b border-line/60 px-4 py-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-semibold">
-                Student Profile
-              </CardTitle>
+              <CardTitle className="text-sm font-semibold">Student Profile</CardTitle>
 
               {isProfileEditing && (
-                <span className="text-xs text-warning-foreground">
-                  Unsaved changes
-                </span>
+                <span className="text-xs text-warning-foreground">Unsaved changes</span>
               )}
             </div>
           </CardHeader>
 
           <CardContent className="p-4">
             <div className="grid gap-3 xl:grid-cols-[1fr_1fr_1.3fr_1fr_auto_auto]">
-              
               {/* Student */}
               <div>
                 <label className="mb-1 block text-[11px] font-medium text-muted-foreground">
@@ -423,22 +412,16 @@ export function UniversityMatcher() {
 
                 <select
                   value={selectedStudentId}
+                  disabled={isLoading || students.length === 0}
                   onChange={(event) => {
                     const studentId = event.target.value;
 
                     setSelectedStudentId(studentId);
 
-                    const student = mockStudents.find(
-                      (item) => item.id === studentId,
-                    );
+                    const student = students.find((item) => item.id === studentId);
 
                     if (student) {
-                      setEditableProfile({
-                        desiredCourse: student.desiredCourse ?? "",
-                        preferredCountries:
-                          student.preferredCountries.join(", "),
-                        budget: student.budget ?? "",
-                      });
+                      setEditableProfile(profileFromStudent(student));
                     }
 
                     setHasSearched(false);
@@ -447,7 +430,13 @@ export function UniversityMatcher() {
                   }}
                   className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-1 focus:ring-ring"
                 >
-                  {mockStudents.map((student) => (
+                  {isLoading && <option value="">Loading students...</option>}
+
+                  {!isLoading && students.length === 0 && (
+                    <option value="">No students found</option>
+                  )}
+
+                  {students.map((student) => (
                     <option key={student.id} value={student.id}>
                       {student.name}
                     </option>
@@ -472,6 +461,7 @@ export function UniversityMatcher() {
                     setIsProfileEditing(true);
                   }}
                   placeholder="e.g. Computer Science"
+                  onKeyDown={handleSearchOnEnter}
                   className="h-9"
                 />
               </div>
@@ -492,7 +482,8 @@ export function UniversityMatcher() {
 
                     setIsProfileEditing(true);
                   }}
-                  placeholder="UK, Canada, Australia"
+                  placeholder="Germany"
+                  onKeyDown={handleSearchOnEnter}
                   className="h-9"
                 />
 
@@ -517,9 +508,14 @@ export function UniversityMatcher() {
 
                     setIsProfileEditing(true);
                   }}
-                  placeholder="e.g. ₹25 Lakh"
+                  placeholder="e.g. EUR 5,000"
+                  onKeyDown={handleSearchOnEnter}
                   className="h-9"
                 />
+
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  Tuition is compared only for budgets in EUR
+                </p>
               </div>
 
               {/* Save Changes */}
@@ -545,6 +541,7 @@ export function UniversityMatcher() {
                   size="sm"
                   className="h-9 w-full"
                   onClick={handleSearch}
+                  disabled={!canSearch}
                 >
                   <Search className="h-4 w-4" />
                   Find Universities
@@ -554,139 +551,120 @@ export function UniversityMatcher() {
           </CardContent>
         </Card>
 
+        {/* Load Error */}
+        {loadError && (
+          <Card className="mb-5 border-danger/25 shadow-none">
+            <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+              <AlertTriangle className="h-8 w-8 text-danger" />
+
+              <h2 className="mt-3 font-semibold">Unable to load university data</h2>
+
+              <p className="mt-1 max-w-md text-sm text-muted-foreground">{loadError}</p>
+
+              <Button variant="outline" size="sm" className="mt-4" onClick={loadData}>
+                Try Again
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Results */}
-        {hasSearched && (
+        {hasSearched && !loadError && (
           <Card className="overflow-hidden shadow-none">
             <CardHeader className="border-b border-line/60">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                  <CardTitle className="text-base">
-                    University Matches
-                  </CardTitle>
+                  <CardTitle className="text-base">University Matches</CardTitle>
 
                   <p className="mt-1 text-xs text-muted-foreground">
-                    {filteredMatches.length} universities matched
-                    for {selectedStudent?.name}.
+                    {filteredMatches.length} of {universityCount} universities matched for{" "}
+                    {selectedStudent?.name}.
                   </p>
                 </div>
 
                 <div className="space-y-3">
-                {/* Search */}
-                <div className="relative w-full">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  {/* Search */}
+                  <div className="relative w-full">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
 
-                  <Input
-                    value={search}
-                    onChange={(event) => setSearch(event.target.value)}
-                    placeholder="Search university, country or course..."
-                    className="pl-9"
-                  />
-                </div>
+                    <Input
+                      value={search}
+                      onChange={(event) => setSearch(event.target.value)}
+                      placeholder="Search university, city or course..."
+                      className="pl-9"
+                    />
+                  </div>
 
-                {/* Filters */}
-                <div className="flex flex-wrap gap-2">
+                  {/* Filters */}
+                  <div className="flex flex-wrap gap-2">
+                    {/* Country */}
+                    <select
+                      value={countryFilter}
+                      onChange={(event) => setCountryFilter(event.target.value)}
+                      className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                    >
+                      <option value="All">All Countries</option>
 
-                  {/* Country */}
-                  <select
-                    value={countryFilter}
-                    onChange={(event) =>
-                      setCountryFilter(event.target.value)
-                    }
-                    className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-                  >
-                    <option value="All">All Countries</option>
-
-                    {[...new Set(matches.map((match) => match.country))]
-                      .sort()
-                      .map((country) => (
+                      {[...new Set(matches.map((match) => match.country))].sort().map((country) => (
                         <option key={country} value={country}>
                           {country}
                         </option>
                       ))}
-                  </select>
+                    </select>
 
-                  {/* Difficulty */}
-                  <select
-                    value={difficultyFilter}
-                    onChange={(event) =>
-                      setDifficultyFilter(event.target.value)
-                    }
-                    className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-                  >
-                    <option value="All">All Difficulty</option>
-                    <option value="Easy">Easy</option>
-                    <option value="Medium">Medium</option>
-                    <option value="Hard">Hard</option>
-                    <option value="Very Hard">Very Hard</option>
-                  </select>
+                    {/* Status */}
+                    <select
+                      value={statusFilter}
+                      onChange={(event) => setStatusFilter(event.target.value)}
+                      className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                    >
+                      <option value="All">All Matches</option>
 
-                  {/* Budget */}
-                  <select
-                    value={budgetFilter}
-                    onChange={(event) =>
-                      setBudgetFilter(event.target.value)
-                    }
-                    className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-                  >
-                    <option value="All">All Budget</option>
-                    <option value="Within Budget">Within Budget</option>
-                    <option value="Near Budget">Near Budget</option>
-                    <option value="Above Budget">Above Budget</option>
-                    <option value="Review">Review</option>
-                  </select>
-
-                  {/* Status */}
-                  <select
-                    value={statusFilter}
-                    onChange={(event) =>
-                      setStatusFilter(event.target.value)
-                    }
-                    className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-                  >
-                    <option value="All">All Matches</option>
-                    <option value="Matching">Matching</option>
-                    <option value="Review Required">
-                      Review Required
-                    </option>
-                  </select>
-
-                  {/* Intake */}
-                  <select
-                    value={intakeFilter}
-                    onChange={(event) =>
-                      setIntakeFilter(event.target.value)
-                    }
-                    className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-                  >
-                    <option value="All">All Intakes</option>
-
-                    {[...new Set(matches.map((match) => match.intake))]
-                      .filter(Boolean)
-                      .sort()
-                      .map((intake) => (
-                        <option key={intake} value={intake}>
-                          {intake}
+                      {MATCH_STATUSES.map((status) => (
+                        <option key={status} value={status}>
+                          {status}
                         </option>
                       ))}
-                  </select>
+                    </select>
 
-                  {/* Reset */}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setSearch("");
-                      setCountryFilter("All");
-                      setDifficultyFilter("All");
-                      setBudgetFilter("All");
-                      setStatusFilter("All");
-                      setIntakeFilter("All");
-                    }}
-                  >
-                    Reset Filters
-                  </Button>
+                    {/* Application Opens */}
+                    <select
+                      value={opensFilter}
+                      onChange={(event) => setOpensFilter(event.target.value)}
+                      className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                    >
+                      <option value="All">All Application Openings</option>
+
+                      {[
+                        ...new Set(
+                          matches
+                            .map((match) => match.applicationOpens)
+                            .filter((opens): opens is string => Boolean(opens)),
+                        ),
+                      ]
+                        .sort()
+                        .map((opens) => (
+                          <option key={opens} value={opens}>
+                            {opens}
+                          </option>
+                        ))}
+                    </select>
+
+                    {/* Reset */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setSearch("");
+                        setCountryFilter("All");
+                        setStatusFilter("All");
+                        setOpensFilter("All");
+                      }}
+                    >
+                      Reset Filters
+                    </Button>
+                  </div>
                 </div>
-              </div>
               </div>
             </CardHeader>
 
@@ -701,11 +679,11 @@ export function UniversityMatcher() {
                         </th>
 
                         <th className="px-5 py-3 font-medium">
-                          <SortableHeader label="Country" sortKey="country" />
+                          <SortableHeader label="Location" sortKey="country" />
                         </th>
 
                         <th className="px-5 py-3 font-medium">
-                          <SortableHeader label="Course" sortKey="course" />
+                          <SortableHeader label="Matching Courses" sortKey="course" />
                         </th>
 
                         <th className="px-5 py-3 font-medium">
@@ -713,145 +691,141 @@ export function UniversityMatcher() {
                         </th>
 
                         <th className="px-5 py-3 font-medium">
-                          <SortableHeader label="Budget Fit" sortKey="budget" />
+                          <SortableHeader label="Living Budget" sortKey="living" />
                         </th>
 
                         <th className="px-5 py-3 font-medium">
-                          <SortableHeader label="Difficulty" sortKey="difficulty" />
+                          <SortableHeader label="IELTS" sortKey="ielts" />
                         </th>
 
                         <th className="px-5 py-3 font-medium">
-                          <SortableHeader label="Intake" sortKey="intake" />
+                          <SortableHeader label="Indian %" sortKey="percentage" />
                         </th>
 
                         <th className="px-5 py-3 font-medium">
                           <SortableHeader label="Deadline" sortKey="deadline" />
                         </th>
 
-                        <th className="px-5 py-3 text-right font-medium">
-                          Action
+                        <th className="px-5 py-3 font-medium">
+                          <SortableHeader label="Status" sortKey="status" />
                         </th>
+
+                        <th className="px-5 py-3 text-right font-medium">Action</th>
                       </tr>
                     </thead>
 
                     <tbody className="divide-y divide-line/60">
-                      {sortedMatches.map((match) => {
-                        const budgetFit = getBudgetFit(
-                          selectedStudent!,
-                          match,
-                        );
+                      {sortedMatches.map((match) => (
+                        <tr
+                          key={match.universityId}
+                          className="transition-colors hover:bg-accent/40"
+                        >
+                          {/* University */}
+                          <td className="px-5 py-4">
+                            <div className="min-w-[200px]">
+                              <p className="font-semibold">{match.university}</p>
 
-                        return (
-                          <tr
-                            key={`${match.universityId}-${match.courseId}`}
-                            className="transition-colors hover:bg-accent/40"
-                          >
-                            {/* University */}
-                            <td className="px-5 py-4">
-                              <div className="min-w-[200px]">
-                                <p className="font-semibold">
-                                  {match.university}
-                                </p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                {match.universityId}
+                              </p>
+                            </div>
+                          </td>
 
-                                <p className="mt-1 text-xs text-muted-foreground">
-                                  {match.universityId}
-                                </p>
-                              </div>
-                            </td>
+                          {/* Location */}
+                          <td className="px-5 py-4">
+                            <div className="flex items-center gap-1.5">
+                              <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+                              <span>{match.country}</span>
+                            </div>
 
-                            {/* Country */}
-                            <td className="px-5 py-4">
-                              <div className="flex items-center gap-1.5">
-                                <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
-                                <span>{match.country}</span>
-                              </div>
-                            </td>
+                            {match.city && (
+                              <p className="mt-1 pl-5 text-xs text-muted-foreground">
+                                {match.city}
+                              </p>
+                            )}
+                          </td>
 
-                            {/* Course */}
-                            <td className="px-5 py-4">
-                              <div className="max-w-[220px]">
-                                <p className="font-medium">
-                                  {match.course}
-                                </p>
+                          {/* Course */}
+                          <td className="px-5 py-4">
+                            <div className="max-w-[220px]">
+                              <p className="font-medium">
+                                {match.matchedCourses.join(", ") || "No course match"}
+                              </p>
 
-                                {match.canonicalCourse &&
-                                  match.canonicalCourse !==
-                                    match.course && (
-                                    <p className="mt-1 text-xs text-muted-foreground">
-                                      {match.canonicalCourse}
-                                    </p>
-                                  )}
-                              </div>
-                            </td>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                {match.courses.length} listed courses
+                              </p>
+                            </div>
+                          </td>
 
-                            {/* Tuition */}
-                            <td className="px-5 py-4">
-                              <div className="min-w-[150px]">
-                                <p className="font-medium">
-                                  {formatMoney(
-                                    match.tuitionMin,
-                                    match.tuitionMax,
-                                    match.tuitionCurrency,
-                                    match.tuitionPeriod,
-                                  )}
-                                </p>
-                              </div>
-                            </td>
-
-                            {/* Budget */}
-                            <td className="px-5 py-4">
-                              <Badge
-                                variant="outline"
-                                className={budgetFit.className}
-                              >
-                                {budgetFit.label}
-                              </Badge>
-                            </td>
-
-                            {/* Difficulty */}
-                            <td className="px-5 py-4">
-                              <Badge
-                                variant="outline"
-                                className={difficultyClass(
-                                  match.difficulty,
-                                )}
-                              >
-                                {match.difficulty}
-                              </Badge>
-                            </td>
-
-                            {/* Intake */}
-                            <td className="px-5 py-4">
-                              <div className="flex items-center gap-1.5 whitespace-nowrap">
-                                <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
-                                {match.intake}
-                              </div>
-                            </td>
-
-                            {/* Deadline */}
-                            <td className="px-5 py-4">
-                              <div className="flex items-center gap-1.5 whitespace-nowrap">
-                                <Clock3 className="h-3.5 w-3.5 text-muted-foreground" />
-                                {match.applicationDeadline ||
+                          {/* Tuition */}
+                          <td className="px-5 py-4">
+                            <div className="min-w-[150px]">
+                              <p className="font-medium">
+                                {formatTuition(match.tuitionMin, match.tuitionMax) ??
                                   "Not available"}
-                              </div>
-                            </td>
+                              </p>
 
-                            {/* Action */}
-                            <td className="px-5 py-4 text-right">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() =>
-                                  setSelectedMatch(match)
-                                }
-                              >
-                                More Details
-                              </Button>
-                            </td>
-                          </tr>
-                        );
-                      })}
+                              {tuitionNote(match.annualTuitionFee) && (
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  {tuitionNote(match.annualTuitionFee)}
+                                </p>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* Living Budget */}
+                          <td className="px-5 py-4">
+                            <div className="min-w-[140px]">
+                              <p className="font-medium">
+                                {formatLivingBudget(match.livingBudget) ?? "Not available"}
+                              </p>
+
+                              {match.livingBudget && (
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  {match.country}-wide
+                                </p>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* IELTS */}
+                          <td className="px-5 py-4 whitespace-nowrap">
+                            {match.englishRequirement || "Not available"}
+                          </td>
+
+                          {/* Recommended Indian % */}
+                          <td className="px-5 py-4 whitespace-nowrap">
+                            {match.recommendedIndianPercentage || "Not available"}
+                          </td>
+
+                          {/* Deadline */}
+                          <td className="px-5 py-4">
+                            <div className="flex items-center gap-1.5 whitespace-nowrap">
+                              <Clock3 className="h-3.5 w-3.5 text-muted-foreground" />
+                              {match.applicationDeadline || "Not available"}
+                            </div>
+                          </td>
+
+                          {/* Status */}
+                          <td className="px-5 py-4">
+                            <Badge variant="outline" className={statusClass(match.status)}>
+                              {match.status}
+                            </Badge>
+                          </td>
+
+                          {/* Action */}
+                          <td className="px-5 py-4 text-right">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setSelectedMatch(match)}
+                            >
+                              More Details
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
@@ -860,11 +834,17 @@ export function UniversityMatcher() {
                   <GraduationCap className="mx-auto h-10 w-10 text-muted-foreground" />
 
                   <h3 className="mt-3 font-semibold">
-                    No universities found
+                    {universityCount === 0
+                      ? "No university data available"
+                      : "No universities found"}
                   </h3>
 
                   <p className="mt-1 text-sm text-muted-foreground">
-                    Try changing the student or search keyword.
+                    {universityCount === 0
+                      ? "The university database is empty. Seed the Germany Sheet2 data and try again."
+                      : matches.length > 0
+                        ? "No matches fit the current search or filters."
+                        : "No university lists a course matching this student's desired course or specialization."}
                   </p>
                 </div>
               )}
@@ -873,7 +853,7 @@ export function UniversityMatcher() {
         )}
 
         {/* Initial State */}
-        {!hasSearched && (
+        {!hasSearched && !loadError && (
           <Card className="shadow-none">
             <CardContent className="flex flex-col items-center justify-center py-20 text-center">
               <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -881,15 +861,19 @@ export function UniversityMatcher() {
               </div>
 
               <h2 className="mt-4 text-lg font-semibold">
-                Ready to find universities?
+                {isLoading ? "Loading universities..." : "Ready to find universities?"}
               </h2>
 
               <p className="mt-1 max-w-md text-sm text-muted-foreground">
-                Select a student and click{" "}
-                <span className="font-medium">
-                  Find Universities
-                </span>{" "}
-                to generate matching university recommendations.
+                {isLoading ? (
+                  "Fetching students and university data."
+                ) : (
+                  <>
+                    Select a student and click{" "}
+                    <span className="font-medium">Find Universities</span> to match against{" "}
+                    {universityCount} universities.
+                  </>
+                )}
               </p>
             </CardContent>
           </Card>
@@ -915,13 +899,10 @@ export function UniversityMatcher() {
                   </div>
 
                   <div>
-                    <DialogTitle className="text-xl">
-                      {selectedMatch.university}
-                    </DialogTitle>
+                    <DialogTitle className="text-xl">{selectedMatch.university}</DialogTitle>
 
                     <DialogDescription className="mt-1">
-                      {selectedMatch.course} ·{" "}
-                      {selectedMatch.country}
+                      {[selectedMatch.city, selectedMatch.country].filter(Boolean).join(", ")}
                     </DialogDescription>
                   </div>
                 </div>
@@ -930,138 +911,204 @@ export function UniversityMatcher() {
               <div className="space-y-5">
                 {/* Basic Information */}
                 <section>
-                  <h3 className="mb-3 text-sm font-semibold">
-                    Course Information
-                  </h3>
+                  <h3 className="mb-3 text-sm font-semibold">Course Information</h3>
 
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <DetailItem label="University" value={selectedMatch.university} />
+
+                    <DetailItem label="Country" value={selectedMatch.country} />
+
+                    <DetailItem label="City" value={selectedMatch.city} />
+
                     <DetailItem
-                      label="University"
-                      value={selectedMatch.university}
+                      label="Matching Courses"
+                      value={selectedMatch.matchedCourses.join(", ")}
+                    />
+
+                    <DetailItem label="Major Courses" value={selectedMatch.courses.join(", ")} />
+
+                    <DetailItem
+                      label={selectedMatch.rankingSource ?? "Ranking"}
+                      value={selectedMatch.ranking && `#${selectedMatch.ranking}`}
                     />
 
                     <DetailItem
-                      label="Country"
-                      value={selectedMatch.country}
-                    />
-
-                    <DetailItem
-                      label="Course"
-                      value={selectedMatch.course}
-                    />
-
-                    <DetailItem
-                      label="Course Category"
-                      value={selectedMatch.canonicalCourse}
-                    />
-
-                    <DetailItem
-                      label="Difficulty"
+                      label="Status"
                       value={
-                        <Badge
-                          variant="outline"
-                          className={difficultyClass(
-                            selectedMatch.difficulty,
-                          )}
-                        >
-                          {selectedMatch.difficulty}
+                        <Badge variant="outline" className={statusClass(selectedMatch.status)}>
+                          {selectedMatch.status}
                         </Badge>
                       }
-                    />
-
-                    <DetailItem
-                      label="Intake"
-                      value={selectedMatch.intake}
                     />
                   </div>
                 </section>
 
+                {/* Admission Difficulty */}
+                {selectedMatch.admissionDifficulty.length > 0 && (
+                  <section>
+                    <h3 className="mb-3 text-sm font-semibold">Admission Difficulty by Field</h3>
+
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {selectedMatch.admissionDifficulty.map((entry) => (
+                        <div
+                          key={entry.field}
+                          className={`flex items-center justify-between gap-3 rounded-md border p-3 text-sm ${
+                            selectedMatch.relevantDifficultyFields.includes(entry.field)
+                              ? "border-primary/30 bg-primary/5"
+                              : "border-line/60"
+                          }`}
+                        >
+                          <span>{entry.field}</span>
+
+                          <Badge variant="outline">{entry.level}</Badge>
+                        </div>
+                      ))}
+                    </div>
+
+                    {selectedMatch.relevantDifficultyFields.length > 0 && (
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Highlighted fields match the student's course.
+                      </p>
+                    )}
+                  </section>
+                )}
+
                 {/* Financial Information */}
                 <section>
-                  <h3 className="mb-3 text-sm font-semibold">
-                    Financial Information
-                  </h3>
+                  <h3 className="mb-3 text-sm font-semibold">Financial Information</h3>
 
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     <DetailItem
-                      label="Tuition Fee"
-                      value={formatMoney(
-                        selectedMatch.tuitionMin,
-                        selectedMatch.tuitionMax,
-                        selectedMatch.tuitionCurrency,
-                        selectedMatch.tuitionPeriod,
-                      )}
+                      label="Annual Tuition Fee (EUR)"
+                      value={selectedMatch.annualTuitionFee}
                     />
 
-                    <DetailItem
-                      label="Student Budget"
-                      value={selectedStudent?.budget}
-                    />
+                    <DetailItem label="Student Budget" value={selectedStudent?.budget} />
 
                     <DetailItem
-                      label="Living Cost"
-                      value={formatMoney(
-                        selectedMatch.livingCostMin,
-                        selectedMatch.livingCostMax,
-                        selectedMatch.livingCostCurrency,
-                        selectedMatch.livingCostPeriod,
-                      )}
+                      label="Living Budget"
+                      value={formatLivingBudget(selectedMatch.livingBudget)}
                     />
                   </div>
+
+                  {selectedMatch.livingBudget?.source && (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Living budget is {selectedMatch.country}-wide, not university-specific.
+                      Source: {selectedMatch.livingBudget.source}
+                    </p>
+                  )}
                 </section>
 
                 {/* Application */}
                 <section>
-                  <h3 className="mb-3 text-sm font-semibold">
-                    Application Details
-                  </h3>
+                  <h3 className="mb-3 text-sm font-semibold">Application Details</h3>
 
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     <DetailItem
-                      label="Application Start"
+                      label="Application Opens"
                       value={
-                        selectedMatch.applicationStartDate ||
-                        "Not available"
+                        selectedMatch.applicationOpens && (
+                          <span className="flex items-center gap-1.5">
+                            <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
+                            {selectedMatch.applicationOpens}
+                          </span>
+                        )
                       }
                     />
 
                     <DetailItem
                       label="Application Deadline"
-                      value={
-                        selectedMatch.applicationDeadline ||
-                        "Not available"
-                      }
+                      value={selectedMatch.applicationDeadline}
                     />
 
+                    <DetailItem label="IELTS" value={selectedMatch.englishRequirement} />
+
                     <DetailItem
-                      label="Last Verified"
-                      value={
-                        selectedMatch.lastVerified ||
-                        "Not available"
-                      }
+                      label="Recommended Indian %"
+                      value={selectedMatch.recommendedIndianPercentage}
                     />
                   </div>
                 </section>
 
+                {/* Intakes */}
+                {selectedMatch.intakes.length > 0 && (
+                  <section>
+                    <h3 className="mb-3 text-sm font-semibold">{selectedMatch.country} Intakes</h3>
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {selectedMatch.intakes.map((intake) => (
+                        <div
+                          key={intake.intake}
+                          className="rounded-lg border border-line/60 bg-secondary/30 p-3 text-sm"
+                        >
+                          <p className="font-medium">{intake.intake}</p>
+
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Classes start: {intake.classStart || "Not available"}
+                          </p>
+
+                          <p className="text-xs text-muted-foreground">
+                            Applications: {intake.applicationStart || "Not available"} –{" "}
+                            {intake.applicationDeadline || "Not available"}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {/* Published Requirements */}
+                <section>
+                  <h3 className="mb-3 text-sm font-semibold">Other Requirements</h3>
+
+                  {selectedMatch.requirements.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {selectedMatch.requirements.map((requirement) => (
+                        <Badge key={requirement} variant="outline">
+                          {requirement}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Not available.</p>
+                  )}
+                </section>
+
+                {/* Required Documents */}
+                {selectedMatch.requiredDocuments.length > 0 && (
+                  <section>
+                    <h3 className="mb-3 text-sm font-semibold">
+                      {selectedMatch.country} Admission Documents
+                    </h3>
+
+                    <div className="flex flex-wrap gap-2">
+                      {selectedMatch.requiredDocuments.map((document) => (
+                        <Badge key={document.document} variant="outline" title={document.purpose}>
+                          {document.document}
+                          {document.mandatory && document.mandatory !== "Yes"
+                            ? ` (${document.mandatory})`
+                            : ""}
+                        </Badge>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
                 {/* Matching Criteria */}
                 <section>
-                  <h3 className="mb-3 text-sm font-semibold">
-                    Why this university matched
-                  </h3>
+                  <h3 className="mb-3 text-sm font-semibold">Why this university matched</h3>
 
                   {selectedMatch.matchedCriteria.length > 0 ? (
                     <div className="grid gap-2 sm:grid-cols-2">
-                      {selectedMatch.matchedCriteria.map(
-                        (criteria) => (
-                          <div
-                            key={criteria}
-                            className="flex items-center gap-2 rounded-md border border-success/20 bg-success/10 p-3 text-sm"
-                          >
-                            <CheckCircle2 className="h-4 w-4 shrink-0 text-success" />
-                            {criteria}
-                          </div>
-                        ),
-                      )}
+                      {selectedMatch.matchedCriteria.map((criteria) => (
+                        <div
+                          key={criteria}
+                          className="flex items-center gap-2 rounded-md border border-success/20 bg-success/10 p-3 text-sm"
+                        >
+                          <CheckCircle2 className="h-4 w-4 shrink-0 text-success" />
+                          {criteria}
+                        </div>
+                      ))}
                     </div>
                   ) : (
                     <p className="text-sm text-muted-foreground">
@@ -1073,9 +1120,7 @@ export function UniversityMatcher() {
                 {/* Warnings */}
                 {selectedMatch.warnings.length > 0 && (
                   <section>
-                    <h3 className="mb-3 text-sm font-semibold">
-                      Review Before Shortlisting
-                    </h3>
+                    <h3 className="mb-3 text-sm font-semibold">Review Before Shortlisting</h3>
 
                     <div className="space-y-2">
                       {selectedMatch.warnings.map((warning) => (
@@ -1095,31 +1140,21 @@ export function UniversityMatcher() {
                 {/* Missing Requirements */}
                 {selectedMatch.missingRequirements.length > 0 && (
                   <section>
-                    <h3 className="mb-3 text-sm font-semibold">
-                      Missing Requirements
-                    </h3>
+                    <h3 className="mb-3 text-sm font-semibold">Missing Requirements</h3>
 
                     <div className="flex flex-wrap gap-2">
-                      {selectedMatch.missingRequirements.map(
-                        (requirement) => (
-                          <Badge
-                            key={requirement}
-                            variant="outline"
-                          >
-                            {requirement}
-                          </Badge>
-                        ),
-                      )}
+                      {selectedMatch.missingRequirements.map((requirement) => (
+                        <Badge key={requirement} variant="outline">
+                          {requirement}
+                        </Badge>
+                      ))}
                     </div>
                   </section>
                 )}
               </div>
 
               <DialogFooter className="flex-col gap-2 sm:flex-row">
-                <Button
-                  variant="outline"
-                  onClick={() => setSelectedMatch(null)}
-                >
+                <Button variant="outline" onClick={() => setSelectedMatch(null)}>
                   Close
                 </Button>
 
@@ -1130,10 +1165,14 @@ export function UniversityMatcher() {
                   </Button>
                 )}
 
-                <Button variant="outline">
-                  <ExternalLink />
-                  View University
-                </Button>
+                {selectedMatch.website && (
+                  <Button variant="outline" asChild>
+                    <a href={selectedMatch.website} target="_blank" rel="noreferrer">
+                      <ExternalLink />
+                      View University
+                    </a>
+                  </Button>
+                )}
               </DialogFooter>
             </>
           )}

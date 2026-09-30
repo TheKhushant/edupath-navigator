@@ -175,9 +175,87 @@ const universitySchema = new mongoose.Schema(
       type: mongoose.Schema.Types.Mixed,
     },
 
+    // Normalized Sheet2 university name; the Germany seed upserts on it.
+    sourceKey: {
+      type: String,
+      trim: true,
+    },
+
+    // Other Sheet2 rows with the same university name (Sheet2 lists a few twice).
+    sheet2DuplicateRows: {
+      type: [mongoose.Schema.Types.Mixed],
+      default: undefined,
+    },
+
+    rankingSource: {
+      type: String,
+      trim: true,
+    },
+
+    // Workbook Sheet1: admission difficulty tier per field of study.
+    admissionDifficulty: {
+      type: [
+        {
+          _id: false,
+          field: String,
+          level: String,
+          markedPrivate: Boolean,
+          sourceName: String,
+          sheet: String,
+          rowNumber: Number,
+        },
+      ],
+      default: undefined,
+    },
+
+    // Original rows from other workbook sheets that were linked to this university.
+    linkedSheetRows: {
+      type: [
+        {
+          _id: false,
+          sheet: String,
+          rowNumber: Number,
+          sourceName: String,
+          data: mongoose.Schema.Types.Mixed,
+        },
+      ],
+      default: undefined,
+    },
+
     notes: {
       type: String,
       trim: true,
+    },
+
+    // ---------- Excel import (University section upload) ----------
+
+    // Where the record came from: file, sheet, original row, import batch
+    importSource: {
+      type: {
+        _id: false,
+        fileName: String,
+        sheet: String,
+        rowNumber: Number,
+        importId: String,
+        importedAt: Date,
+      },
+      default: undefined,
+    },
+
+    // Original row exactly as it appeared in the uploaded sheet (header -> value)
+    sourceRow: {
+      type: mongoose.Schema.Types.Mixed,
+    },
+
+    // Columns that are not part of the standard template, preserved as-is
+    extraFields: {
+      type: mongoose.Schema.Types.Mixed,
+    },
+
+    // Other rows in the upload with the same university name
+    duplicateSourceRows: {
+      type: [mongoose.Schema.Types.Mixed],
+      default: undefined,
     },
   },
   {
@@ -188,5 +266,6 @@ const universitySchema = new mongoose.Schema(
 universitySchema.index({ name: 1 });
 universitySchema.index({ country: 1 });
 universitySchema.index({ difficulty: 1 });
+universitySchema.index({ sourceKey: 1 });
 
 module.exports = mongoose.model("University", universitySchema);

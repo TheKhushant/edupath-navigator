@@ -52,9 +52,39 @@ export type TuitionPeriod = "Year" | "Semester" | "Month";
 export type LivingCostPeriod = "Month" | "Year";
 
 export type MatchStatus =
-  "Matching" | "Review Required" | "Meets Published Requirements" | "Requirement Review Needed";
+  | "Matching"
+  | "Review Required"
+  | "Meets Published Requirements"
+  | "Requirement Review Needed";
 
-export type MatchAction = "Shortlist" | "Review" | "Review credits" | "Verify";
+export type MatchAction = "Shortlist" | "Review" | "Verify";
+
+/** Admission difficulty tier for one field of study (workbook Sheet1). */
+export interface AdmissionDifficulty {
+  field: string;
+  level: string;
+  markedPrivate?: boolean;
+  sourceName?: string;
+  sheet?: string;
+  rowNumber?: number;
+}
+
+/** Original row from another workbook sheet, linked to a Sheet2 university. */
+export interface LinkedSheetRow {
+  sheet: string;
+  rowNumber: number;
+  sourceName: string;
+  data: Record<string, string>;
+}
+
+export interface LivingBudget {
+  min: number;
+  max: number;
+  currency: string;
+  period: LivingCostPeriod;
+  /** Where the figure comes from, e.g. the blocked account requirement. */
+  source?: string;
+}
 
 export type AssessmentMatchStatus = "Meets Published Requirements" | "Requirement Review Needed";
 
@@ -134,6 +164,7 @@ export interface University {
   lor?: string;
   aps?: string;
 
+  annualTuitionFee?: string;
   tuitionFeeMin?: number;
   tuitionFeeMax?: number;
 
@@ -159,6 +190,40 @@ export interface University {
 
   sourceUrl?: string;
   notes?: string;
+
+  /** Original Germany workbook Sheet2 row, as stored by the seed script. */
+  sheet2Data?: Sheet2Row;
+  /** Later Sheet2 rows with the same university name. */
+  sheet2DuplicateRows?: Sheet2Row[];
+
+  rankingSource?: string;
+  admissionDifficulty?: AdmissionDifficulty[];
+  linkedSheetRows?: LinkedSheetRow[];
+
+  /** Set when the record was created or last updated by an Excel import. */
+  importSource?: {
+    fileName: string;
+    sheet: string;
+    rowNumber: number | null;
+    importId: string;
+    importedAt: string;
+  };
+  /** Original uploaded row (header -> value). */
+  sourceRow?: Record<string, string>;
+  /** Non-template columns from the upload, preserved as-is. */
+  extraFields?: Record<string, string>;
+}
+
+export interface Sheet2Row {
+  University?: string;
+  City?: string;
+  "Annual Tuition Fee (EUR)"?: string;
+  IELTS?: string | number;
+  "Other Requirements"?: string;
+  "Application Opens"?: string;
+  "Application Deadline"?: string;
+  "Major Courses"?: string;
+  "Recommended Indian %"?: string;
 }
 
 /* =========================================================
@@ -220,22 +285,55 @@ export interface Country {
   /*
    * Country-level living cost.
    */
-  livingCostMin: number;
-  livingCostMax: number;
-  livingCostCurrency: string;
-  livingCostPeriod: LivingCostPeriod;
+  livingCostMin?: number;
+  livingCostMax?: number;
+  livingCostCurrency?: string;
+  livingCostPeriod?: LivingCostPeriod;
+  livingCostSource?: string;
 
-  languageRequirements: string;
-  academicRequirements: string;
-  financialRequirements: string;
-  visaRequirements: string;
-  applicationProcess: string;
-  postStudy: string;
+  languageRequirements?: string;
+  academicRequirements?: string;
+  financialRequirements?: string;
+  visaRequirements?: string;
+  applicationProcess?: string;
+  postStudy?: string;
 
-  notes: string;
+  notes?: string;
 
-  lastVerified: string;
-  sourceUrl: string;
+  lastVerified?: string;
+  sourceUrl?: string;
+
+  /* Germany workbook, Sheets 5-12 */
+  intakes?: CountryIntake[];
+  admissionSteps?: { step: number; process: string }[];
+  requiredDocuments?: CountryDocument[];
+  universitySuggestionGuide?: Record<string, string>[];
+  gradeConversion?: {
+    universityType: string;
+    typicalMinimumCgpa: string;
+    germanGradeEquivalent: string;
+  }[];
+  referenceNotes?: { sheet: string; title: string; lines: string[] }[];
+  unlinkedUniversityRows?: {
+    sheet: string;
+    rowNumber: number;
+    name: string;
+    reason: string;
+    data: Record<string, string>;
+  }[];
+}
+
+export interface CountryIntake {
+  intake: string;
+  classStart?: string;
+  applicationStart?: string;
+  applicationDeadline?: string;
+}
+
+export interface CountryDocument {
+  document: string;
+  purpose?: string;
+  mandatory?: string;
 }
 
 export interface Course {
@@ -259,30 +357,39 @@ export interface UniversityMatch {
   universityId: string;
   university: string;
 
-  countryId: string;
   country: string;
+  city?: string;
+  website?: string;
 
-  courseId: string;
-  course: string;
-  canonicalCourse: string;
+  /** Sheet2 "Major Courses" that matched the student's course/specialization. */
+  matchedCourses: string[];
+  /** All Sheet2 "Major Courses" for the university. */
+  courses: string[];
 
-  difficulty: UniversityDifficulty;
+  /** Raw Sheet2 "Annual Tuition Fee (EUR)" text. */
+  annualTuitionFee?: string;
+  tuitionMin?: number;
+  tuitionMax?: number;
+  /** Country-level living cost; not university-specific in the workbook. */
+  livingBudget?: LivingBudget;
 
-  tuitionMin: number;
-  tuitionMax: number;
-  tuitionCurrency: string;
-  tuitionPeriod: TuitionPeriod;
+  ranking?: string;
+  rankingSource?: string;
+  admissionDifficulty: AdmissionDifficulty[];
+  /** Fields from admissionDifficulty that match the student's course. */
+  relevantDifficultyFields: string[];
 
-  livingCostMin: number;
-  livingCostMax: number;
-  livingCostCurrency: string;
-  livingCostPeriod: string;
+  intakes: CountryIntake[];
+  requiredDocuments: CountryDocument[];
 
-  intake: string;
-  applicationStartDate: string;
-  applicationDeadline: string;
+  englishRequirement?: string;
 
-  lastVerified: string;
+  recommendedIndianPercentage?: string;
+
+  applicationOpens?: string;
+  applicationDeadline?: string;
+
+  requirements: string[];
 
   matchedCriteria: string[];
   warnings: string[];
@@ -433,4 +540,154 @@ export interface AssessmentResult {
   courses: string[];
 
   matches: AssessmentMatch[];
+}
+
+/* =========================================================
+   UNIVERSITY EXCEL IMPORT
+========================================================= */
+
+export type ExcelIssueSeverity = "ERROR" | "WARNING" | "INFO";
+
+export interface ExcelImportIssue {
+  severity: ExcelIssueSeverity;
+  sheet: string;
+  row: number | null;
+  column: string;
+  code: string;
+  message: string;
+  value: string;
+  suggestion: string;
+}
+
+export type ExcelSheetType =
+  | "universities"
+  | "rankings"
+  | "websites"
+  | "admissionDifficulty"
+  | "instructions"
+  | "unrecognized"
+  | "empty";
+
+export interface ExcelColumnInfo {
+  index: number;
+  header: string;
+  status: "mapped" | "suggested" | "unexpected" | "duplicate" | "empty";
+  mappedTo?: string;
+  mappedHeader?: string;
+  suggestion?: string;
+}
+
+export type ExcelRowStatus =
+  | "valid"
+  | "invalid"
+  | "duplicate"
+  | "skipped"
+  | "unlinked"
+  | "ignored"
+  | "header";
+
+export interface ExcelSheetRow {
+  rowNumber: number;
+  cells: string[];
+  status: ExcelRowStatus;
+  action: string;
+}
+
+export interface ExcelSheetPreview {
+  name: string;
+  type: ExcelSheetType;
+  purpose: string;
+  headerRowNumber: number | null;
+  rowCount: number;
+  columnCount: number;
+  columns: ExcelColumnInfo[];
+  validRows: number;
+  invalidRows: number;
+  truncated: boolean;
+  rows: ExcelSheetRow[];
+}
+
+export interface ExcelImportSummary {
+  sheetsScanned: number;
+  rowsScanned: number;
+  totalColumns: number;
+  validRows: number;
+  invalidRows: number;
+  skippedRows: number;
+  duplicateRows: number;
+  unlinkedRows: number;
+  ignoredRows: number;
+  universities: {
+    new: number;
+    alreadyExists: number;
+    duplicateInFile: number;
+    invalid: number;
+    linkedExistingOnly: number;
+  };
+  willCreate: number;
+  willUpdate: number;
+  willSkip: number;
+  errors: number;
+  warnings: number;
+  infos: number;
+}
+
+export type ExcelImportMode = "skip" | "update";
+
+export interface ExcelPlannedUniversity {
+  name: string;
+  country: string;
+  city: string;
+  action: "create" | "update" | "skip";
+  existingId?: string;
+  sheet: string;
+  rowNumber: number | null;
+}
+
+export interface ExcelImportPreview {
+  fileName: string;
+  fileSize: number;
+  sha256: string;
+  sheetCount: number;
+  sheetNames: string[];
+  options: { mode: ExcelImportMode; defaultCountry: string };
+  canImport: boolean;
+  importRowCount: number;
+  summary: ExcelImportSummary;
+  sheets: ExcelSheetPreview[];
+  issues: ExcelImportIssue[];
+  issuesTruncated: boolean;
+  universities: ExcelPlannedUniversity[];
+}
+
+export interface ExcelImportOptions {
+  mode: ExcelImportMode;
+  defaultCountry: string;
+}
+
+export interface ExcelImportedUniversity {
+  id: string;
+  name: string;
+  country: string;
+  city: string;
+  action: "created" | "updated";
+}
+
+export interface ExcelImportResult {
+  importId: string;
+  transactional: boolean;
+  fileName: string;
+  summary: {
+    sheetsScanned: number;
+    rowsScanned: number;
+    imported: number;
+    updated: number;
+    skipped: number;
+    duplicates: number;
+    invalid: number;
+    unlinked: number;
+    errors: number;
+    warnings: number;
+  };
+  universities: ExcelImportedUniversity[];
 }
