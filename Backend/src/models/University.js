@@ -161,9 +161,18 @@ const universitySchema = new mongoose.Schema(
       trim: true,
     },
 
+    annualTuitionFee: {
+      type: String,
+      trim: true,
+    },
+
     recommendedIndianPercentage: {
       type: String,
       trim: true,
+    },
+
+    sheet2Data: {
+      type: mongoose.Schema.Types.Mixed,
     },
 
     notes: {
