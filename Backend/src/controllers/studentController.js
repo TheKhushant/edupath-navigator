@@ -1,4 +1,21 @@
+const mongoose = require("mongoose");
 const Student = require("../models/Student");
+
+// Helper: find student by MongoDB _id OR custom id
+const studentFilter = (id) => {
+  if (mongoose.Types.ObjectId.isValid(id)) {
+    return {
+      $or: [
+        { _id: id },
+        { id: id },
+      ],
+    };
+  }
+
+  return {
+    id: id,
+  };
+};
 
 // GET all students
 const getStudents = async (req, res) => {
@@ -22,12 +39,9 @@ const getStudents = async (req, res) => {
 // GET single student
 const getStudentById = async (req, res) => {
   try {
-    const student = await Student.findOne({
-      $or: [
-        { _id: req.params.id },
-        { id: req.params.id },
-      ],
-    });
+    const student = await Student.findOne(
+      studentFilter(req.params.id)
+    );
 
     if (!student) {
       return res.status(404).json({
@@ -71,13 +85,19 @@ const createStudent = async (req, res) => {
 // UPDATE student
 const updateStudent = async (req, res) => {
   try {
+    const query = mongoose.Types.ObjectId.isValid(req.params.id)
+      ? {
+          $or: [
+            { _id: req.params.id },
+            { id: req.params.id },
+          ],
+        }
+      : {
+          id: req.params.id,
+        };
+
     const student = await Student.findOneAndUpdate(
-      {
-        $or: [
-          { _id: req.params.id },
-          { id: req.params.id },
-        ],
-      },
+      query,
       req.body,
       {
         new: true,
@@ -109,12 +129,9 @@ const updateStudent = async (req, res) => {
 // DELETE student
 const deleteStudent = async (req, res) => {
   try {
-    const student = await Student.findOneAndDelete({
-      $or: [
-        { _id: req.params.id },
-        { id: req.params.id },
-      ],
-    });
+    const student = await Student.findOneAndDelete(
+      studentFilter(req.params.id)
+    );
 
     if (!student) {
       return res.status(404).json({

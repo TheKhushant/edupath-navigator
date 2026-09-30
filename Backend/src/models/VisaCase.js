@@ -6,7 +6,6 @@ const visaCaseSchema = new mongoose.Schema(
       type: String,
       unique: true,
       sparse: true,
-      trim: true,
     },
 
     studentId: {
@@ -15,6 +14,11 @@ const visaCaseSchema = new mongoose.Schema(
     },
 
     studentExternalId: {
+      type: String,
+      trim: true,
+    },
+
+    studentName: {
       type: String,
       trim: true,
     },
@@ -34,6 +38,11 @@ const visaCaseSchema = new mongoose.Schema(
       trim: true,
     },
 
+    university: {
+      type: String,
+      trim: true,
+    },
+
     visaType: {
       type: String,
       trim: true,
@@ -45,6 +54,11 @@ const visaCaseSchema = new mongoose.Schema(
     },
 
     applicationDate: {
+      type: String,
+      trim: true,
+    },
+
+    appointmentDate: {
       type: String,
       trim: true,
     },
@@ -65,6 +79,11 @@ const visaCaseSchema = new mongoose.Schema(
     },
 
     expiryDate: {
+      type: String,
+      trim: true,
+    },
+
+    documentStatus: {
       type: String,
       trim: true,
     },

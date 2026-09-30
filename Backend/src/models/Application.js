@@ -6,7 +6,6 @@ const applicationSchema = new mongoose.Schema(
       type: String,
       unique: true,
       sparse: true,
-      trim: true,
     },
 
     studentId: {
@@ -15,6 +14,11 @@ const applicationSchema = new mongoose.Schema(
     },
 
     studentExternalId: {
+      type: String,
+      trim: true,
+    },
+
+    studentName: {
       type: String,
       trim: true,
     },
@@ -69,7 +73,17 @@ const applicationSchema = new mongoose.Schema(
       trim: true,
     },
 
+    submissionDate: {
+      type: String,
+      trim: true,
+    },
+
     submittedDate: {
+      type: String,
+      trim: true,
+    },
+
+    offerStatus: {
       type: String,
       trim: true,
     },
@@ -89,6 +103,11 @@ const applicationSchema = new mongoose.Schema(
       trim: true,
     },
 
+    counsellor: {
+      type: String,
+      trim: true,
+    },
+
     notes: {
       type: String,
       trim: true,
@@ -102,5 +121,6 @@ const applicationSchema = new mongoose.Schema(
 applicationSchema.index({ studentExternalId: 1 });
 applicationSchema.index({ universityExternalId: 1 });
 applicationSchema.index({ status: 1 });
+applicationSchema.index({ offerStatus: 1 });
 
 module.exports = mongoose.model("Application", applicationSchema);

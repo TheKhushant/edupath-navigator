@@ -6,7 +6,6 @@ const universityCourseSchema = new mongoose.Schema(
       type: String,
       unique: true,
       sparse: true,
-      trim: true,
     },
 
     universityId: {
@@ -15,6 +14,11 @@ const universityCourseSchema = new mongoose.Schema(
     },
 
     universityExternalId: {
+      type: String,
+      trim: true,
+    },
+
+    universityName: {
       type: String,
       trim: true,
     },
@@ -35,7 +39,27 @@ const universityCourseSchema = new mongoose.Schema(
       trim: true,
     },
 
+    canonicalCourse: {
+      type: String,
+      trim: true,
+    },
+
+    aliases: {
+      type: [String],
+      default: [],
+    },
+
+    degree: {
+      type: String,
+      trim: true,
+    },
+
     degreeLevel: {
+      type: String,
+      trim: true,
+    },
+
+    specialization: {
       type: String,
       trim: true,
     },
@@ -45,44 +69,116 @@ const universityCourseSchema = new mongoose.Schema(
       trim: true,
     },
 
-    tuitionFee: {
+    language: {
+      type: String,
+      trim: true,
+    },
+
+    tuitionMin: {
       type: Number,
+    },
+
+    tuitionMax: {
+      type: Number,
+    },
+
+    tuitionFee: {
+      type: String,
+      trim: true,
+    },
+
+    tuitionCurrency: {
+      type: String,
+      trim: true,
+    },
+
+    tuitionPeriod: {
+      type: String,
+      trim: true,
     },
 
     applicationFee: {
-      type: Number,
+      type: String,
+      trim: true,
     },
 
-    intake: [
-      {
-        type: String,
-        trim: true,
-      },
-    ],
+    intake: {
+      type: String,
+      trim: true,
+    },
+
+    applicationStartDate: {
+      type: String,
+      trim: true,
+    },
 
     applicationDeadline: {
       type: String,
       trim: true,
     },
 
-    minimumIELTS: {
-      type: Number,
+    requiredDegree: {
+      type: String,
+      trim: true,
     },
 
-    minimumCGPA: {
-      type: Number,
+    minimumGpa: {
+      type: String,
+      trim: true,
     },
 
-    requirements: [
-      {
-        type: String,
-        trim: true,
-      },
-    ],
+    ielts: {
+      type: String,
+      trim: true,
+    },
+
+    toefl: {
+      type: String,
+      trim: true,
+    },
+
+    gre: {
+      type: String,
+      trim: true,
+    },
+
+    eligibility: {
+      type: String,
+      trim: true,
+    },
+
+    requirements: {
+      type: [String],
+      default: [],
+    },
+
+    entranceExam: {
+      type: String,
+      trim: true,
+    },
+
+    interview: {
+      type: String,
+      trim: true,
+    },
 
     difficulty: {
       type: String,
       enum: ["Easy", "Medium", "Hard", "Very Hard"],
+    },
+
+    lastVerified: {
+      type: String,
+      trim: true,
+    },
+
+    sourceUrl: {
+      type: String,
+      trim: true,
+    },
+
+    notes: {
+      type: String,
       trim: true,
     },
 
@@ -96,9 +192,10 @@ const universityCourseSchema = new mongoose.Schema(
   }
 );
 
+universityCourseSchema.index({ courseName: 1 });
 universityCourseSchema.index({ universityExternalId: 1 });
 universityCourseSchema.index({ courseExternalId: 1 });
-universityCourseSchema.index({ courseName: 1 });
+universityCourseSchema.index({ difficulty: 1 });
 
 module.exports = mongoose.model(
   "UniversityCourse",

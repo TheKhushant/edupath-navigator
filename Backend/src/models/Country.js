@@ -6,7 +6,6 @@ const countrySchema = new mongoose.Schema(
       type: String,
       unique: true,
       sparse: true,
-      trim: true,
     },
 
     name: {
@@ -18,19 +17,72 @@ const countrySchema = new mongoose.Schema(
     code: {
       type: String,
       trim: true,
-      uppercase: true,
     },
 
-    currency: {
+    livingCostMin: {
+      type: Number,
+    },
+
+    livingCostMax: {
+      type: Number,
+    },
+
+    livingCostCurrency: {
       type: String,
       trim: true,
     },
 
-    averageLivingCost: {
-      type: Number,
+    livingCostPeriod: {
+      type: String,
+      trim: true,
+    },
+
+    languageRequirements: {
+      type: String,
+      trim: true,
+    },
+
+    academicRequirements: {
+      type: String,
+      trim: true,
+    },
+
+    financialRequirements: {
+      type: String,
+      trim: true,
+    },
+
+    visaRequirements: {
+      type: String,
+      trim: true,
+    },
+
+    applicationProcess: {
+      type: String,
+      trim: true,
+    },
+
+    postStudy: {
+      type: String,
+      trim: true,
     },
 
     description: {
+      type: String,
+      trim: true,
+    },
+
+    notes: {
+      type: String,
+      trim: true,
+    },
+
+    lastVerified: {
+      type: String,
+      trim: true,
+    },
+
+    sourceUrl: {
       type: String,
       trim: true,
     },
@@ -39,6 +91,11 @@ const countrySchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+
+    status: {
+      type: String,
+      trim: true,
+    },
   },
   {
     timestamps: true,
@@ -46,5 +103,6 @@ const countrySchema = new mongoose.Schema(
 );
 
 countrySchema.index({ name: 1 });
+countrySchema.index({ code: 1 });
 
 module.exports = mongoose.model("Country", countrySchema);

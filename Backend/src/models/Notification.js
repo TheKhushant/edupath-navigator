@@ -6,7 +6,6 @@ const notificationSchema = new mongoose.Schema(
       type: String,
       unique: true,
       sparse: true,
-      trim: true,
     },
 
     title: {
@@ -15,9 +14,33 @@ const notificationSchema = new mongoose.Schema(
       trim: true,
     },
 
+    description: {
+      type: String,
+      trim: true,
+    },
+
+    category: {
+      type: String,
+      trim: true,
+    },
+
+    time: {
+      type: String,
+      trim: true,
+    },
+
+    tone: {
+      type: String,
+      trim: true,
+    },
+
+    read: {
+      type: Boolean,
+      default: false,
+    },
+
     message: {
       type: String,
-      required: true,
       trim: true,
     },
 
@@ -41,11 +64,6 @@ const notificationSchema = new mongoose.Schema(
       trim: true,
     },
 
-    read: {
-      type: Boolean,
-      default: false,
-    },
-
     createdAtSource: {
       type: String,
       trim: true,
@@ -57,6 +75,6 @@ const notificationSchema = new mongoose.Schema(
 );
 
 notificationSchema.index({ read: 1 });
-notificationSchema.index({ createdAt: -1 });
+notificationSchema.index({ category: 1 });
 
 module.exports = mongoose.model("Notification", notificationSchema);

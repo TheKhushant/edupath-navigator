@@ -6,7 +6,6 @@ const followUpSchema = new mongoose.Schema(
       type: String,
       unique: true,
       sparse: true,
-      trim: true,
     },
 
     studentId: {
@@ -15,6 +14,16 @@ const followUpSchema = new mongoose.Schema(
     },
 
     studentExternalId: {
+      type: String,
+      trim: true,
+    },
+
+    studentName: {
+      type: String,
+      trim: true,
+    },
+
+    counsellor: {
       type: String,
       trim: true,
     },
@@ -35,7 +44,17 @@ const followUpSchema = new mongoose.Schema(
       trim: true,
     },
 
-    status: {
+    date: {
+      type: String,
+      trim: true,
+    },
+
+    time: {
+      type: String,
+      trim: true,
+    },
+
+    dueDate: {
       type: String,
       trim: true,
     },
@@ -45,7 +64,7 @@ const followUpSchema = new mongoose.Schema(
       trim: true,
     },
 
-    dueDate: {
+    status: {
       type: String,
       trim: true,
     },
@@ -72,6 +91,7 @@ const followUpSchema = new mongoose.Schema(
 
 followUpSchema.index({ studentExternalId: 1 });
 followUpSchema.index({ status: 1 });
+followUpSchema.index({ priority: 1 });
 followUpSchema.index({ dueDate: 1 });
 
 module.exports = mongoose.model("FollowUp", followUpSchema);

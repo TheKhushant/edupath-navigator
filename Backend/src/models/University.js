@@ -6,7 +6,6 @@ const universitySchema = new mongoose.Schema(
       type: String,
       unique: true,
       sparse: true,
-      trim: true,
     },
 
     name: {
@@ -32,12 +31,67 @@ const universitySchema = new mongoose.Schema(
     },
 
     ranking: {
-      type: Number,
+      type: String,
+      trim: true,
     },
 
     difficulty: {
       type: String,
       enum: ["Easy", "Medium", "Hard", "Very Hard"],
+    },
+
+    website: {
+      type: String,
+      trim: true,
+    },
+
+    portal: {
+      type: String,
+      trim: true,
+    },
+
+    applicationFee: {
+      type: String,
+      trim: true,
+    },
+
+    scholarship: {
+      type: String,
+      trim: true,
+    },
+
+    financialProof: {
+      type: String,
+      trim: true,
+    },
+
+    partTime: {
+      type: String,
+      trim: true,
+    },
+
+    postStudyWork: {
+      type: String,
+      trim: true,
+    },
+
+    documents: {
+      type: [String],
+      default: [],
+    },
+
+    sop: {
+      type: String,
+      trim: true,
+    },
+
+    lor: {
+      type: String,
+      trim: true,
+    },
+
+    aps: {
+      type: String,
       trim: true,
     },
 
@@ -57,19 +111,12 @@ const universitySchema = new mongoose.Schema(
       type: Number,
     },
 
-    intake: [
-      {
-        type: String,
-        trim: true,
-      },
-    ],
-
-    applicationDeadline: {
-      type: String,
-      trim: true,
+    intake: {
+      type: [String],
+      default: [],
     },
 
-    website: {
+    applicationDeadline: {
       type: String,
       trim: true,
     },
@@ -79,25 +126,37 @@ const universitySchema = new mongoose.Schema(
       trim: true,
     },
 
-    requirements: [
-      {
-        type: String,
-        trim: true,
-      },
-    ],
-
-    englishRequirement: {
-      type: Number,
+    requirements: {
+      type: [String],
+      default: [],
     },
 
-    popularCourses: [
-      {
-        type: String,
-        trim: true,
-      },
-    ],
+    englishRequirement: {
+      type: String,
+      trim: true,
+    },
+
+    popularCourses: {
+      type: [String],
+      default: [],
+    },
 
     status: {
+      type: String,
+      trim: true,
+    },
+
+    lastVerified: {
+      type: String,
+      trim: true,
+    },
+
+    sourceUrl: {
+      type: String,
+      trim: true,
+    },
+
+    notes: {
       type: String,
       trim: true,
     },

@@ -6,7 +6,6 @@ const courseSchema = new mongoose.Schema(
       type: String,
       unique: true,
       sparse: true,
-      trim: true,
     },
 
     name: {
@@ -15,12 +14,22 @@ const courseSchema = new mongoose.Schema(
       trim: true,
     },
 
+    degree: {
+      type: String,
+      trim: true,
+    },
+
     level: {
       type: String,
       trim: true,
     },
 
-    field: {
+    specialization: {
+      type: String,
+      trim: true,
+    },
+
+    country: {
       type: String,
       trim: true,
     },
@@ -30,7 +39,27 @@ const courseSchema = new mongoose.Schema(
       trim: true,
     },
 
+    language: {
+      type: String,
+      trim: true,
+    },
+
+    requirements: {
+      type: String,
+      trim: true,
+    },
+
     description: {
+      type: String,
+      trim: true,
+    },
+
+    notes: {
+      type: String,
+      trim: true,
+    },
+
+    field: {
       type: String,
       trim: true,
     },
@@ -46,6 +75,7 @@ const courseSchema = new mongoose.Schema(
 );
 
 courseSchema.index({ name: 1 });
-courseSchema.index({ field: 1 });
+courseSchema.index({ country: 1 });
+courseSchema.index({ status: 1 });
 
 module.exports = mongoose.model("Course", courseSchema);

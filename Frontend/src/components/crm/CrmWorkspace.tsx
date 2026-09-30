@@ -1,5 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
+import { studentService } from "@/services/crmServices";
+
 import {
   AlertCircle,
   ArrowUpRight,
@@ -156,7 +158,6 @@ function Sidebar({
           <Button variant="ghost" size="icon" className="ml-auto md:hidden" onClick={onClose}>
             <X />
           </Button>
-          
         </div>
         <div className="mt-8 flex-1 space-y-1 overflow-y-auto">
           <p className="mb-3 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
@@ -233,16 +234,11 @@ function PageHeader({
           {title}
         </h1>
 
-        <p className="mt-1 text-sm text-muted-foreground">
-          {description}
-        </p>
+        <p className="mt-1 text-sm text-muted-foreground">{description}</p>
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Button
-          variant="outline"
-          onClick={() => navigate({ to: "/university-matcher" })}
-        >
+        <Button variant="outline" onClick={() => navigate({ to: "/university-matcher" })}>
           <GraduationCap />
           University Matcher
         </Button>
@@ -257,7 +253,6 @@ function PageHeader({
     </div>
   );
 }
-  
 
 function EmptyState({ title, description }: { title: string; description: string }) {
   return (
@@ -465,11 +460,52 @@ function TableToolbar({
 function StudentsModule() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("All");
-  const [students, setStudents] = useState<Student[]>(mockStudents);
+  const [students, setStudents] = useState<Student[]>([]);
   const [selected, setSelected] = useState<Student | null>(null);
+  const [editing, setEditing] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [editForm, setEditForm] = useState<Partial<Student>>({});
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const deleteStudent = async () => {
+  if (!selected) return;
+
+  const confirmed = window.confirm(
+    `Are you sure you want to delete ${selected.name}?`,
+  );
+
+  if (!confirmed) return;
+
+  try {
+    await studentService.deleteStudent(selected.id);
+
+    setStudents((current) =>
+      current.filter((student) => student.id !== selected.id),
+    );
+
+    setSelected(null);
+    setEditing(false);
+
+    console.log("Student deleted from MongoDB:", selected.id);
+  } catch (error) {
+    console.error("Failed to delete student:", error);
+    alert("Failed to delete student");
+  }
+};
+
+  useEffect(() => {
+    const loadStudents = async () => {
+      try {
+        const data = await studentService.getStudents();
+        setStudents(data);
+      } catch (error) {
+        console.error("Failed to load students:", error);
+      }
+    };
+
+    loadStudents();
+  }, []);
+
   const filtered = useMemo(
     () =>
       students.filter(
@@ -481,8 +517,9 @@ function StudentsModule() {
       ),
     [students, search, filter],
   );
-  const addStudent = () => {
+  const addStudent = async () => {
     if (!name.trim()) return;
+
     const initials = name
       .trim()
       .split(" ")
@@ -490,11 +527,12 @@ function StudentsModule() {
       .join("")
       .slice(0, 2)
       .toUpperCase();
+
     const newStudent: Student = {
       id: `SS-2026-${String(students.length + 1).padStart(4, "0")}`,
-      name,
+      name: name.trim(),
       initials,
-      email: email || "new.student@example.com",
+      email: email.trim() || "new.student@example.com",
       mobile: "Not provided",
       qualification: "To be assessed",
       branch: "To be assessed",
@@ -512,12 +550,44 @@ function StudentsModule() {
       service: "Study Abroad",
       city: "—",
     };
-    setStudents((current) => [newStudent, ...current]);
-    setSelected(newStudent);
-    setAdding(false);
-    setName("");
-    setEmail("");
+
+    try {
+      const createdStudent = await studentService.createStudent(newStudent);
+
+      setStudents((current) => [createdStudent, ...current]);
+      setSelected(createdStudent);
+
+      setAdding(false);
+      setName("");
+      setEmail("");
+
+      console.log("Student saved to MongoDB:", createdStudent);
+    } catch (error) {
+      console.error("Failed to create student:", error);
+      alert("Failed to save student");
+    }
   };
+
+  const saveStudent = async () => {
+    if (!selected) return;
+
+    try {
+      const updatedStudent = await studentService.updateStudent(selected.id, editForm);
+
+      setStudents((current) =>
+        current.map((student) => (student.id === updatedStudent.id ? updatedStudent : student)),
+      );
+
+      setSelected(updatedStudent);
+      setEditing(false);
+
+      console.log("Student updated in MongoDB:", updatedStudent);
+    } catch (error) {
+      console.error("Failed to update student:", error);
+      alert("Failed to update student");
+    }
+  };
+
   return (
     <div className="workspace-rise">
       <PageHeader
@@ -560,7 +630,11 @@ function StudentsModule() {
                   <td className="px-5 py-3">
                     <button
                       className="flex items-center gap-3 text-left"
-                      onClick={() => setSelected(student)}
+                      onClick={() => {
+                        setSelected(student);
+                        setEditForm({ ...student });
+                        setEditing(false);
+                      }}
                     >
                       <span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand/15 text-xs font-semibold text-brand">
                         {student.initials}
@@ -580,7 +654,15 @@ function StudentsModule() {
                   <td className="px-5 py-3 text-muted-foreground">{student.counsellor}</td>
                   <td className="px-5 py-3 text-muted-foreground">{student.lastFollowUp}</td>
                   <td className="px-5 py-3 text-right">
-                    <Button variant="ghost" size="sm" onClick={() => setSelected(student)}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setSelected(student);
+                        setEditForm({ ...student });
+                        setEditing(false);
+                      }}
+                    >
                       View <ChevronRight />
                     </Button>
                   </td>
@@ -596,41 +678,388 @@ function StudentsModule() {
           )}
         </div>
       </Card>
-      <Dialog open={Boolean(selected)} onOpenChange={(open) => !open && setSelected(null)}>
-        <DialogContent>
+      <Dialog
+        open={Boolean(selected)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelected(null);
+            setEditing(false);
+          }
+        }}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{selected?.name}</DialogTitle>
+            <DialogTitle>{editing ? "Edit student" : selected?.name}</DialogTitle>
+
             <DialogDescription>
               {selected?.id} · {selected?.service} · {selected?.city}
             </DialogDescription>
           </DialogHeader>
-          {selected && (
-            <div className="grid gap-3 sm:grid-cols-2">
-              {[
-                ["Email", selected.email],
-                ["Mobile", selected.mobile],
-                ["Qualification", selected.qualification],
-                ["Desired course", selected.desiredCourse],
-                ["Countries", selected.preferredCountries.join(", ") || "To be discussed"],
-                ["Budget", selected.budget],
-                ["Stage", selected.stage],
-                ["Counsellor", selected.counsellor],
-              ].map(([label, value]) => (
-                <div key={label} className="rounded-md border border-line/60 bg-secondary/40 p-3">
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                    {label}
-                  </p>
-                  <p className="mt-1 text-sm font-medium">{value}</p>
-                </div>
-              ))}
-            </div>
+
+          {selected && !editing && (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {[
+                  ["Name", selected.name],
+                  ["Email", selected.email],
+                  ["Mobile", selected.mobile],
+                  ["Qualification", selected.qualification],
+                  ["Branch", selected.branch],
+                  ["CGPA", selected.cgpa],
+                  ["Graduation Year", selected.graduationYear],
+                  ["Desired Course", selected.desiredCourse],
+                  ["Specialization", selected.specialization],
+                  ["Countries", selected.preferredCountries.join(", ") || "To be discussed"],
+                  ["Intake", selected.intake],
+                  ["Budget", selected.budget],
+                  ["Counsellor", selected.counsellor],
+                  ["Stage", selected.stage],
+                  ["Status", selected.status],
+                  ["Service", selected.service],
+                  ["City", selected.city],
+                  ["Last Follow-up", selected.lastFollowUp],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-md border border-line/60 bg-secondary/40 p-3">
+                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                      {label}
+                    </p>
+
+                    <p className="mt-1 text-sm font-medium">{String(value ?? "—")}</p>
+                  </div>
+                ))}
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setSelected(null)}>
+                  Close
+                </Button>
+
+                <Button
+                  onClick={() => {
+                    setEditForm({ ...selected });
+                    setEditing(true);
+                  }}
+                >
+                  Edit student
+                </Button>
+                <DialogFooter>
+                <Button
+                  variant="destructive"
+                  onClick={deleteStudent}
+                >
+                  Delete Student
+                </Button>
+
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setEditing(false);
+                  }}
+                >
+                  Cancel
+                </Button>
+
+                <Button onClick={saveStudent}>
+                  Save changes
+                </Button>
+              </DialogFooter>
+              </DialogFooter>
+            </>
           )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSelected(null)}>
-              Close
-            </Button>
-            <Button onClick={() => setSelected(null)}>Save changes</Button>
-          </DialogFooter>
+
+          {selected && editing && (
+            <>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {/* Name */}
+                <label className="grid gap-1.5 text-sm font-medium">
+                  Name
+                  <Input
+                    value={editForm.name ?? ""}
+                    onChange={(event) =>
+                      setEditForm({
+                        ...editForm,
+                        name: event.target.value,
+                      })
+                    }
+                  />
+                </label>
+
+                {/* Email */}
+                <label className="grid gap-1.5 text-sm font-medium">
+                  Email
+                  <Input
+                    type="email"
+                    value={editForm.email ?? ""}
+                    onChange={(event) =>
+                      setEditForm({
+                        ...editForm,
+                        email: event.target.value,
+                      })
+                    }
+                  />
+                </label>
+
+                {/* Mobile */}
+                <label className="grid gap-1.5 text-sm font-medium">
+                  Mobile
+                  <Input
+                    value={editForm.mobile ?? ""}
+                    onChange={(event) =>
+                      setEditForm({
+                        ...editForm,
+                        mobile: event.target.value,
+                      })
+                    }
+                  />
+                </label>
+
+                {/* Qualification */}
+                <label className="grid gap-1.5 text-sm font-medium">
+                  Qualification
+                  <Input
+                    value={editForm.qualification ?? ""}
+                    onChange={(event) =>
+                      setEditForm({
+                        ...editForm,
+                        qualification: event.target.value,
+                      })
+                    }
+                  />
+                </label>
+
+                {/* Branch */}
+                <label className="grid gap-1.5 text-sm font-medium">
+                  Branch
+                  <Input
+                    value={editForm.branch ?? ""}
+                    onChange={(event) =>
+                      setEditForm({
+                        ...editForm,
+                        branch: event.target.value,
+                      })
+                    }
+                  />
+                </label>
+
+                {/* CGPA */}
+                <label className="grid gap-1.5 text-sm font-medium">
+                  CGPA
+                  <Input
+                    value={editForm.cgpa ?? ""}
+                    onChange={(event) =>
+                      setEditForm({
+                        ...editForm,
+                        cgpa: event.target.value,
+                      })
+                    }
+                  />
+                </label>
+
+                {/* Graduation Year */}
+                <label className="grid gap-1.5 text-sm font-medium">
+                  Graduation Year
+                  <Input
+                    type="number"
+                    value={editForm.graduationYear ?? ""}
+                    onChange={(event) =>
+                      setEditForm({
+                        ...editForm,
+                        graduationYear: Number(event.target.value),
+                      })
+                    }
+                  />
+                </label>
+
+                {/* Desired Course */}
+                <label className="grid gap-1.5 text-sm font-medium">
+                  Desired Course
+                  <Input
+                    value={editForm.desiredCourse ?? ""}
+                    onChange={(event) =>
+                      setEditForm({
+                        ...editForm,
+                        desiredCourse: event.target.value,
+                      })
+                    }
+                  />
+                </label>
+
+                {/* Specialization */}
+                <label className="grid gap-1.5 text-sm font-medium">
+                  Specialization
+                  <Input
+                    value={editForm.specialization ?? ""}
+                    onChange={(event) =>
+                      setEditForm({
+                        ...editForm,
+                        specialization: event.target.value,
+                      })
+                    }
+                  />
+                </label>
+
+                {/* Intake */}
+                <label className="grid gap-1.5 text-sm font-medium">
+                  Intake
+                  <Input
+                    value={editForm.intake ?? ""}
+                    onChange={(event) =>
+                      setEditForm({
+                        ...editForm,
+                        intake: event.target.value,
+                      })
+                    }
+                  />
+                </label>
+
+                {/* Budget */}
+                <label className="grid gap-1.5 text-sm font-medium">
+                  Budget
+                  <Input
+                    value={editForm.budget ?? ""}
+                    onChange={(event) =>
+                      setEditForm({
+                        ...editForm,
+                        budget: event.target.value,
+                      })
+                    }
+                  />
+                </label>
+
+                {/* Counsellor */}
+                <label className="grid gap-1.5 text-sm font-medium">
+                  Counsellor
+                  <Input
+                    value={editForm.counsellor ?? ""}
+                    onChange={(event) =>
+                      setEditForm({
+                        ...editForm,
+                        counsellor: event.target.value,
+                      })
+                    }
+                  />
+                </label>
+
+                {/* Stage */}
+                {/* Stage */}
+                <label className="grid gap-1.5 text-sm font-medium">
+                  Stage
+                  <select
+                    value={editForm.stage ?? ""}
+                    onChange={(event) =>
+                      setEditForm({
+                        ...editForm,
+                        stage: event.target.value as Student["stage"],
+                      })
+                    }
+                    className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="New Enquiry">New Enquiry</option>
+                    <option value="Registration">Registration</option>
+                    <option value="Profile Assessment">Profile Assessment</option>
+                    <option value="University Shortlist">University Shortlist</option>
+                    <option value="Documents">Documents</option>
+                    <option value="Application">Application</option>
+                    <option value="Visa">Visa</option>
+                  </select>
+                </label>
+
+                {/* Status */}
+                {/* Status */}
+                <label className="grid gap-1.5 text-sm font-medium">
+                  Status
+                  <select
+                    value={editForm.status ?? ""}
+                    onChange={(event) =>
+                      setEditForm({
+                        ...editForm,
+                        status: event.target.value as Student["status"],
+                      })
+                    }
+                    className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
+                  </select>
+                </label>
+
+                {/* Service */}
+                {/* Service */}
+                <label className="grid gap-1.5 text-sm font-medium">
+                  Service
+                  <Input
+                    value={editForm.service ?? ""}
+                    onChange={(event) =>
+                      setEditForm({
+                        ...editForm,
+                        service: event.target.value as Student["service"],
+                      })
+                    }
+                  />
+                </label>
+
+                {/* City */}
+                <label className="grid gap-1.5 text-sm font-medium">
+                  City
+                  <Input
+                    value={editForm.city ?? ""}
+                    onChange={(event) =>
+                      setEditForm({
+                        ...editForm,
+                        city: event.target.value,
+                      })
+                    }
+                  />
+                </label>
+
+                {/* Last Follow-up */}
+                <label className="grid gap-1.5 text-sm font-medium">
+                  Last Follow-up
+                  <Input
+                    value={editForm.lastFollowUp ?? ""}
+                    onChange={(event) =>
+                      setEditForm({
+                        ...editForm,
+                        lastFollowUp: event.target.value,
+                      })
+                    }
+                  />
+                </label>
+
+                {/* Preferred Countries */}
+                <label className="grid gap-1.5 text-sm font-medium sm:col-span-2">
+                  Preferred Countries
+                  <Input
+                    value={editForm.preferredCountries?.join(", ") ?? ""}
+                    onChange={(event) =>
+                      setEditForm({
+                        ...editForm,
+                        preferredCountries: event.target.value
+                          .split(",")
+                          .map((country) => country.trim())
+                          .filter(Boolean),
+                      })
+                    }
+                    placeholder="Germany, Japan, Netherlands"
+                  />
+                </label>
+              </div>
+
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setEditing(false);
+                    setEditForm({ ...selected });
+                  }}
+                >
+                  Cancel
+                </Button>
+
+                <Button onClick={saveStudent}>Save changes</Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
       <Dialog open={adding} onOpenChange={setAdding}>
@@ -824,48 +1253,42 @@ function RecordsModule({
   if (module === "assessment") return <AssessmentModule />;
   if (module === "reports") return <ReportsModule />;
   const rows =
-  module === "universities"
-    ? mockUniversities
-        .filter(
-          (item) =>
-            `${item.name} ${item.country} ${item.city}`
-              .toLowerCase()
-              .includes(query) &&
-            (filter === "All" || item.country === filter),
-        )
-        .map((item) => (
-          <tr key={item.id} className="hover:bg-accent/40">
-            <td className="px-5 py-3">
-              <p className="font-medium">{item.name}</p>
-              <p className="text-xs text-muted-foreground">
-                {item.id} · {item.city}
-              </p>
-            </td>
-
-            <td className="px-5 py-3 text-muted-foreground">
-              {item.country}
-            </td>
-
-            <td className="px-5 py-3">
-              <div>
-                <p className="font-medium">
-                  University
-                </p>
+    module === "universities"
+      ? mockUniversities
+          .filter(
+            (item) =>
+              `${item.name} ${item.country} ${item.city}`.toLowerCase().includes(query) &&
+              (filter === "All" || item.country === filter),
+          )
+          .map((item) => (
+            <tr key={item.id} className="hover:bg-accent/40">
+              <td className="px-5 py-3">
+                <p className="font-medium">{item.name}</p>
                 <p className="text-xs text-muted-foreground">
-                  Programme details available in University Matcher
+                  {item.id} · {item.city}
                 </p>
-              </div>
-            </td>
+              </td>
 
-            <td className="px-5 py-3 text-muted-foreground">
-              {item.lastVerified || "Not verified"}
-            </td>
+              <td className="px-5 py-3 text-muted-foreground">{item.country}</td>
 
-            <td className="px-5 py-3">
-              <StatusBadge>Verified</StatusBadge>
-            </td>
-          </tr>
-        ))
+              <td className="px-5 py-3">
+                <div>
+                  <p className="font-medium">University</p>
+                  <p className="text-xs text-muted-foreground">
+                    Programme details available in University Matcher
+                  </p>
+                </div>
+              </td>
+
+              <td className="px-5 py-3 text-muted-foreground">
+                {item.lastVerified || "Not verified"}
+              </td>
+
+              <td className="px-5 py-3">
+                <StatusBadge>Verified</StatusBadge>
+              </td>
+            </tr>
+          ))
       : module === "courses"
         ? mockCourses
             .filter(
@@ -1151,11 +1574,7 @@ function AssessmentModule() {
                 <div className="mt-4">
                   <StatusBadge>{match.status}</StatusBadge>
                 </div>
-                <p className="mt-3 text-xs text-muted-foreground">
-                  {match.warnings?.[0] ||
-                    match.missingRequirements?.[0] ||
-                    "No additional review notes."}
-                </p>
+                <p className="mt-3 text-xs text-muted-foreground">No additional review notes.</p>
                 <Button variant="ghost" size="sm" className="mt-2 px-0">
                   {match.action} <ChevronRight />
                 </Button>

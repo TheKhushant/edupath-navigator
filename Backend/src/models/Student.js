@@ -6,12 +6,16 @@ const studentSchema = new mongoose.Schema(
       type: String,
       unique: true,
       sparse: true,
-      trim: true,
     },
 
     name: {
       type: String,
       required: true,
+      trim: true,
+    },
+
+    initials: {
+      type: String,
       trim: true,
     },
 
@@ -21,67 +25,22 @@ const studentSchema = new mongoose.Schema(
       lowercase: true,
     },
 
-    phone: {
+    mobile: {
       type: String,
       trim: true,
     },
 
-    nationality: {
+    qualification: {
       type: String,
       trim: true,
     },
 
-    dateOfBirth: {
+    branch: {
       type: String,
       trim: true,
     },
 
-    gender: {
-      type: String,
-      trim: true,
-    },
-
-    passportNumber: {
-      type: String,
-      trim: true,
-    },
-
-    passportExpiry: {
-      type: String,
-      trim: true,
-    },
-
-    address: {
-      type: String,
-      trim: true,
-    },
-
-    city: {
-      type: String,
-      trim: true,
-    },
-
-    state: {
-      type: String,
-      trim: true,
-    },
-
-    country: {
-      type: String,
-      trim: true,
-    },
-
-    education: {
-      type: String,
-      trim: true,
-    },
-
-    degree: {
-      type: String,
-      trim: true,
-    },
-
-    university: {
+    cgpa: {
       type: String,
       trim: true,
     },
@@ -90,51 +49,57 @@ const studentSchema = new mongoose.Schema(
       type: Number,
     },
 
-    cgpa: {
-      type: Number,
+    desiredCourse: {
+      type: String,
+      trim: true,
     },
 
-    percentage: {
-      type: Number,
+    specialization: {
+      type: String,
+      trim: true,
     },
 
-    ieltsOverall: {
-      type: Number,
+    preferredCountries: {
+      type: [String],
+      default: [],
     },
 
-    ieltsListening: {
-      type: Number,
-    },
-
-    ieltsReading: {
-      type: Number,
-    },
-
-    ieltsWriting: {
-      type: Number,
-    },
-
-    ieltsSpeaking: {
-      type: Number,
-    },
-
-    preferredCountries: [
-      {
-        type: String,
-        trim: true,
-      },
-    ],
-
-    preferredCourse: {
+    intake: {
       type: String,
       trim: true,
     },
 
     budget: {
-      type: Number,
+      type: String,
+      trim: true,
     },
 
-    intake: {
+    ielts: {
+      type: String,
+      trim: true,
+    },
+
+    german: {
+      type: String,
+      trim: true,
+    },
+
+    japanese: {
+      type: String,
+      trim: true,
+    },
+
+    counsellor: {
+      type: String,
+      trim: true,
+    },
+
+    stage: {
+      type: String,
+      trim: true,
+    },
+
+    lastFollowUp: {
       type: String,
       trim: true,
     },
@@ -144,17 +109,12 @@ const studentSchema = new mongoose.Schema(
       trim: true,
     },
 
-    source: {
+    service: {
       type: String,
       trim: true,
     },
 
-    assignedTo: {
-      type: String,
-      trim: true,
-    },
-
-    notes: {
+    city: {
       type: String,
       trim: true,
     },
@@ -163,5 +123,10 @@ const studentSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+studentSchema.index({ name: 1 });
+studentSchema.index({ email: 1 });
+studentSchema.index({ status: 1 });
+studentSchema.index({ service: 1 });
 
 module.exports = mongoose.model("Student", studentSchema);

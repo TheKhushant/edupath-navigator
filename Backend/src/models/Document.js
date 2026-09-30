@@ -6,7 +6,6 @@ const documentSchema = new mongoose.Schema(
       type: String,
       unique: true,
       sparse: true,
-      trim: true,
     },
 
     studentId: {
@@ -15,6 +14,11 @@ const documentSchema = new mongoose.Schema(
     },
 
     studentExternalId: {
+      type: String,
+      trim: true,
+    },
+
+    studentName: {
       type: String,
       trim: true,
     },
@@ -31,12 +35,12 @@ const documentSchema = new mongoose.Schema(
 
     name: {
       type: String,
-      required: true,
       trim: true,
     },
 
     type: {
       type: String,
+      required: true,
       trim: true,
     },
 
@@ -55,12 +59,22 @@ const documentSchema = new mongoose.Schema(
       trim: true,
     },
 
+    uploadedDate: {
+      type: String,
+      trim: true,
+    },
+
     uploadedAt: {
       type: String,
       trim: true,
     },
 
     verifiedAt: {
+      type: String,
+      trim: true,
+    },
+
+    verifiedBy: {
       type: String,
       trim: true,
     },

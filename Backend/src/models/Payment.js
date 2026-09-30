@@ -6,7 +6,6 @@ const paymentSchema = new mongoose.Schema(
       type: String,
       unique: true,
       sparse: true,
-      trim: true,
     },
 
     studentId: {
@@ -15,6 +14,11 @@ const paymentSchema = new mongoose.Schema(
     },
 
     studentExternalId: {
+      type: String,
+      trim: true,
+    },
+
+    studentName: {
       type: String,
       trim: true,
     },
@@ -29,19 +33,29 @@ const paymentSchema = new mongoose.Schema(
       trim: true,
     },
 
+    service: {
+      type: String,
+      trim: true,
+    },
+
+    paymentType: {
+      type: String,
+      trim: true,
+    },
+
     amount: {
       type: Number,
       required: true,
     },
 
-    currency: {
-      type: String,
-      trim: true,
-      default: "USD",
+    paidAmount: {
+      type: Number,
+      default: 0,
     },
 
-    type: {
+    currency: {
       type: String,
+      default: "INR",
       trim: true,
     },
 
@@ -51,6 +65,11 @@ const paymentSchema = new mongoose.Schema(
     },
 
     paymentMethod: {
+      type: String,
+      trim: true,
+    },
+
+    method: {
       type: String,
       trim: true,
     },
