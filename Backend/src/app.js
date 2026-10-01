@@ -19,6 +19,8 @@ const app = express();
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:8080",
+  "https://edupath-navigator-enbk.vercel.app",
+  "https://edupath-navigator-nine.vercel.app/universities",
   process.env.FRONTEND_URL,
 ].filter(Boolean);
 
