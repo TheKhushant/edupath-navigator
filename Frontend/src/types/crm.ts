@@ -280,6 +280,23 @@ export interface UniversityCourse {
   lastVerified?: string;
   sourceUrl?: string;
   notes?: string;
+
+  /** Set on imported programmes, e.g. "hochschulkompass". */
+  source?: string;
+  studyType?: string;
+  studyMode?: string;
+  admissionMode?: string;
+  applicationMethod?: string;
+  subjectArea?: string;
+  ects?: number;
+  city?: string;
+  state?: string;
+  programmeUrl?: string;
+  status?: string;
+
+  customSearchTags?: string[];
+  searchTags?: string[];
+  searchMatch?: SearchMatch;
 }
 
 /* =========================================================
@@ -356,6 +373,93 @@ export interface Course {
   requirements: string;
   notes: string;
   status: string;
+  field?: string;
+
+  /** Search tags added by hand; kept when the dictionary changes. */
+  customSearchTags?: string[];
+  /** Concept keys the course is found by (derived on the server). */
+  searchTags?: string[];
+  /** Why the course matched the current search (search results only). */
+  searchMatch?: SearchMatch;
+}
+
+/* =========================================================
+   COURSE SEARCH / SEARCH TAGS
+========================================================= */
+
+export type SearchMatchType =
+  | "exact"
+  | "specialization"
+  | "tag"
+  | "name"
+  | "related"
+  | "broader"
+  | "text";
+
+export type SearchTagRelation = "closely_related" | "broader_related";
+
+export interface SearchMatch {
+  type: SearchMatchType;
+  label: string;
+  score: number;
+  matchedTags: { key: string; name: string; relation: "exact" | SearchTagRelation }[];
+}
+
+export interface SearchInfo {
+  query: string;
+  normalized: string;
+  /** Dictionary concepts the query was resolved to. */
+  concepts: { name: string; via: "exact" | "partial" | "fuzzy" }[];
+  /** Set when a typo was corrected ("Artifical Intelligence"). */
+  correctedTo?: string;
+  /** Every term used to expand the search. */
+  expandedTerms: { term: string; relation: "concept" | "alias" | SearchTagRelation }[];
+  relatedTermCount: number;
+  /** Known terms that do have courses, offered when nothing matched. */
+  suggestions: { term: string; count: number }[];
+}
+
+export interface SearchPage<T> {
+  data: T[];
+  total: number;
+  page: number;
+  limit: number;
+  search: SearchInfo | null;
+}
+
+export interface CourseSearchParams {
+  q?: string;
+  status?: string;
+  page: number;
+  limit: number;
+}
+
+export interface SearchTag {
+  id: string;
+  /** Normalized name; what courses store in searchTags. */
+  key: string;
+  name: string;
+  aliases: string[];
+  related: { id: string; name: string; relation: SearchTagRelation }[];
+  category?: string;
+  status: "active" | "inactive";
+}
+
+export type SearchTagInput = {
+  name: string;
+  aliases: string[];
+  related: { tag: string; relation: SearchTagRelation }[];
+  category?: string;
+  status?: "active" | "inactive";
+};
+
+export interface SearchAnalyticsEntry {
+  query: string;
+  key: string;
+  count: number;
+  zeroResultCount: number;
+  lastResultCount?: number;
+  lastSearchedAt?: string;
 }
 
 /* =========================================================
@@ -710,4 +814,166 @@ export interface ExcelImportResult {
     warnings: number;
   };
   universities: ExcelImportedUniversity[];
+}
+
+/* =========================================================
+   UNIVERSITY & COURSE EXPLORER (/api/explorer)
+========================================================= */
+
+export type ExplorerMode = "universities" | "courses";
+
+/** University fields shown on programme results (populated reference). */
+export interface ExplorerUniversityRef {
+  _id: string;
+  id?: string;
+  name: string;
+  city?: string;
+  state?: string;
+  country?: string;
+  universityType?: string;
+  website?: string;
+  portal?: string;
+  ranking?: string;
+  rankingSource?: string;
+  englishRequirement?: string;
+  applicationFee?: string;
+  aps?: string;
+  scholarship?: string;
+  partTime?: string;
+  postStudyWork?: string;
+}
+
+export interface ExplorerCountryInfo {
+  name: string;
+  livingCostMin?: number;
+  livingCostMax?: number;
+  livingCostCurrency?: string;
+  livingCostPeriod?: string;
+  intakes?: {
+    intake?: string;
+    classStart?: string;
+    applicationStart?: string;
+    applicationDeadline?: string;
+  }[];
+  admissionSteps?: { step?: number; process?: string }[];
+  requiredDocuments?: { document?: string; purpose?: string; mandatory?: string }[];
+}
+
+export interface ExplorerCourse {
+  _id: string;
+  id?: string;
+  courseName: string;
+  universityId?: ExplorerUniversityRef | string | null;
+  universityName?: string;
+
+  degree?: string;
+  specialization?: string;
+  subjectArea?: string;
+  canonicalCourse?: string;
+  duration?: string;
+  ects?: number;
+  language?: string;
+  studyType?: string;
+  studyMode?: string;
+
+  intake?: string;
+  applicationStartDate?: string;
+  applicationDeadline?: string;
+  applicationMethod?: string;
+  admissionMode?: string;
+  applicationFee?: string;
+
+  tuitionMin?: number;
+  tuitionMax?: number;
+  tuitionFee?: string;
+  tuitionCurrency?: string;
+  tuitionPeriod?: string;
+
+  requiredDegree?: string;
+  minimumGpa?: string;
+  ielts?: string;
+  toefl?: string;
+  gre?: string;
+  eligibility?: string;
+  requirements?: string[];
+  entranceExam?: string;
+  interview?: string;
+
+  city?: string;
+  state?: string;
+  programmeUrl?: string;
+  sourceUrl?: string;
+  lastVerified?: string;
+  notes?: string;
+
+  searchMatch?: SearchMatch;
+  countryInfo?: ExplorerCountryInfo | null;
+}
+
+export interface ExplorerUniversity {
+  _id: string;
+  id?: string;
+  name: string;
+  country?: string;
+  city?: string;
+  state?: string;
+  universityType?: string;
+  description?: string;
+
+  ranking?: string;
+  rankingSource?: string;
+  website?: string;
+  portal?: string;
+
+  tuitionFeeMin?: number;
+  tuitionFeeMax?: number;
+  annualTuitionFee?: string;
+  applicationFee?: string;
+  livingCostMin?: number;
+  livingCostMax?: number;
+  scholarship?: string;
+  financialProof?: string;
+  partTime?: string;
+  postStudyWork?: string;
+
+  intake?: string[];
+  applicationOpens?: string;
+  applicationDeadline?: string;
+
+  englishRequirement?: string;
+  recommendedIndianPercentage?: string;
+  requirements?: string[];
+  documents?: string[];
+  aps?: string;
+  sop?: string;
+  lor?: string;
+
+  popularCourses?: string[];
+  lastVerified?: string;
+  sourceUrl?: string;
+
+  programmeCount: number;
+  searchMatch?: SearchMatch;
+  programmes?: ExplorerCourse[];
+  countryInfo?: ExplorerCountryInfo | null;
+}
+
+export interface ExplorerFacets {
+  countries: string[];
+  cities: string[];
+  states: string[];
+  universityTypes: string[];
+  degrees: string[];
+  subjects: string[];
+  specializations: string[];
+  languages: string[];
+  intakes: string[];
+  studyModes: string[];
+  durations: string[];
+  applicationMethods: string[];
+}
+
+export interface ExplorerItems {
+  universities: ExplorerUniversity[];
+  courses: ExplorerCourse[];
 }

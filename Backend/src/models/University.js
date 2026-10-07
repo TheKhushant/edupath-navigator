@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const { searchablePlugin } = require("../services/courseSearch");
 
 const universitySchema = new mongoose.Schema(
   {
@@ -257,14 +258,48 @@ const universitySchema = new mongoose.Schema(
       type: [mongoose.Schema.Types.Mixed],
       default: undefined,
     },
+
+    // ---------- External programme source (e.g. Hochschulkompass import) ----------
+
+    // Provider that created this university, e.g. "hochschulkompass"
+    source: {
+      type: String,
+      trim: true,
+    },
+
+    // Provider's own institution id, when the source supplies one
+    sourceRecordId: {
+      type: String,
+      trim: true,
+    },
+
+    // e.g. "Universität", "Fachhochschule / HAW", "Kunst- und Musikhochschule"
+    universityType: {
+      type: String,
+      trim: true,
+    },
   },
   {
     timestamps: true,
   }
 );
 
+// Search tags + ranked search (see services/courseSearch.js). Universities are
+// found by the concepts in their name and popular courses ("AI" -> TUM).
+universitySchema.plugin(searchablePlugin, {
+  scope: "universities",
+  nameField: "name",
+  specializationField: null,
+  tagFields: ["name", "popularCourses"],
+  textFields: ["name", "city", "country", "popularCourses"],
+});
+
 universitySchema.index({ name: 1 });
 universitySchema.index({ country: 1 });
+// University & Course Explorer filters
+universitySchema.index({ country: 1, city: 1 });
+universitySchema.index({ state: 1 });
+universitySchema.index({ universityType: 1 });
 universitySchema.index({ difficulty: 1 });
 universitySchema.index({ sourceKey: 1 });
 

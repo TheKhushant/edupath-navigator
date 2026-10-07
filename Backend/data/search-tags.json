@@ -1,0 +1,250 @@
+{
+  "description": "Starter vocabulary for the course search tag dictionary. Loaded by `npm run seed:search-tags`; after that the SearchTag collection (editable through /api/search-tags and the Courses > Search tags screen) is the source of truth. Re-running the seed only adds what is missing.",
+  "tags": [
+    {
+      "name": "Artificial Intelligence",
+      "category": "Computing",
+      "aliases": ["AI", "A.I.", "Artificial-Intelligence", "KI", "Künstliche Intelligenz", "Intelligent Systems"],
+      "closelyRelated": ["Artificial Intelligence and Machine Learning", "Machine Learning", "Deep Learning", "Generative AI", "Computer Vision", "Natural Language Processing"],
+      "broaderRelated": ["Data Science", "Robotics"]
+    },
+    {
+      "name": "Artificial Intelligence and Machine Learning",
+      "category": "Computing",
+      "aliases": ["AI & ML", "AI/ML", "AIML", "AI and ML", "AI-ML"],
+      "closelyRelated": ["Artificial Intelligence", "Machine Learning", "Deep Learning"],
+      "broaderRelated": ["Data Science"]
+    },
+    {
+      "name": "Machine Learning",
+      "category": "Computing",
+      "aliases": ["ML", "Maschinelles Lernen", "Statistical Learning"],
+      "closelyRelated": ["Artificial Intelligence", "Artificial Intelligence and Machine Learning", "Deep Learning"],
+      "broaderRelated": ["Data Science", "Natural Language Processing", "Computer Vision"]
+    },
+    {
+      "name": "Deep Learning",
+      "category": "Computing",
+      "aliases": ["DL", "Neural Networks", "Neuronale Netze"],
+      "closelyRelated": ["Machine Learning", "Artificial Intelligence", "Computer Vision", "Natural Language Processing", "Generative AI"],
+      "broaderRelated": []
+    },
+    {
+      "name": "Generative AI",
+      "category": "Computing",
+      "aliases": ["GenAI", "Gen AI", "Generative Artificial Intelligence", "Large Language Models", "LLM", "LLMs"],
+      "closelyRelated": ["Artificial Intelligence", "Deep Learning", "Natural Language Processing"],
+      "broaderRelated": ["Machine Learning"]
+    },
+    {
+      "name": "Computer Vision",
+      "category": "Computing",
+      "aliases": ["Machine Vision", "Image Understanding"],
+      "closelyRelated": ["Deep Learning", "Artificial Intelligence"],
+      "broaderRelated": ["Machine Learning", "Robotics"]
+    },
+    {
+      "name": "Natural Language Processing",
+      "category": "Computing",
+      "aliases": ["NLP", "Language Technology", "Computational Linguistics", "Computerlinguistik", "Sprachverarbeitung"],
+      "closelyRelated": ["Artificial Intelligence", "Deep Learning", "Generative AI"],
+      "broaderRelated": ["Machine Learning"]
+    },
+    {
+      "name": "Data Science",
+      "category": "Computing",
+      "aliases": ["DS", "Data Sciences", "Datenwissenschaft", "Datenwissenschaften"],
+      "closelyRelated": ["Machine Learning", "Data Analytics"],
+      "broaderRelated": ["Artificial Intelligence", "Bioinformatics", "Business Informatics"]
+    },
+    {
+      "name": "Data Analytics",
+      "category": "Computing",
+      "aliases": ["Analytics", "Business Analytics", "Data Analysis", "Big Data Analytics", "Big Data", "Datenanalyse"],
+      "closelyRelated": ["Data Science"],
+      "broaderRelated": ["Business Informatics", "Machine Learning"]
+    },
+    {
+      "name": "Computer Science",
+      "category": "Computing",
+      "aliases": ["CS", "CSE", "Computer Science and Engineering", "Computing", "Informatics", "Informatik"],
+      "closelyRelated": ["Software Engineering"],
+      "broaderRelated": ["Artificial Intelligence", "Data Science", "Information Technology", "Cyber Security", "Business Informatics"]
+    },
+    {
+      "name": "Software Engineering",
+      "category": "Computing",
+      "aliases": ["Software Development", "Softwaretechnik", "Software Systems Engineering"],
+      "closelyRelated": ["Computer Science"],
+      "broaderRelated": ["Information Technology"]
+    },
+    {
+      "name": "Information Technology",
+      "category": "Computing",
+      "aliases": ["IT", "Informationstechnik", "Informationstechnologie"],
+      "closelyRelated": ["Computer Science"],
+      "broaderRelated": ["Cyber Security", "Software Engineering", "Business Informatics"]
+    },
+    {
+      "name": "Cyber Security",
+      "category": "Computing",
+      "aliases": ["Cybersecurity", "IT Security", "Information Security", "IT-Sicherheit", "Cyber-Sicherheit", "Cybersicherheit"],
+      "closelyRelated": [],
+      "broaderRelated": ["Computer Science", "Information Technology"]
+    },
+    {
+      "name": "Business Informatics",
+      "category": "Computing",
+      "aliases": ["Wirtschaftsinformatik", "Information Systems", "Management Information Systems", "MIS"],
+      "closelyRelated": ["Data Analytics"],
+      "broaderRelated": ["Computer Science", "Business Administration"]
+    },
+    {
+      "name": "Robotics",
+      "category": "Engineering",
+      "aliases": ["Robotik", "Robotics and Automation"],
+      "closelyRelated": ["Mechatronics"],
+      "broaderRelated": ["Artificial Intelligence", "Computer Vision", "Mechanical Engineering"]
+    },
+    {
+      "name": "Mechatronics",
+      "category": "Engineering",
+      "aliases": ["Mechatronik"],
+      "closelyRelated": ["Robotics", "Mechanical Engineering", "Electrical Engineering"],
+      "broaderRelated": ["Embedded Systems"]
+    },
+    {
+      "name": "Embedded Systems",
+      "category": "Engineering",
+      "aliases": ["Eingebettete Systeme", "Embedded Computing"],
+      "closelyRelated": ["Electrical Engineering"],
+      "broaderRelated": ["Computer Science", "Mechatronics"]
+    },
+    {
+      "name": "Mechanical Engineering",
+      "category": "Engineering",
+      "aliases": ["Maschinenbau", "Mechanical Eng"],
+      "closelyRelated": ["Mechatronics", "Automotive Engineering"],
+      "broaderRelated": ["Industrial Engineering", "Robotics", "Renewable Energy"]
+    },
+    {
+      "name": "Electrical Engineering",
+      "category": "Engineering",
+      "aliases": ["EE", "Elektrotechnik", "Electrical and Electronics Engineering", "EEE"],
+      "closelyRelated": ["Electronics and Communication Engineering", "Mechatronics"],
+      "broaderRelated": ["Embedded Systems", "Renewable Energy"]
+    },
+    {
+      "name": "Electronics and Communication Engineering",
+      "category": "Engineering",
+      "aliases": ["ECE", "Electronics", "Communication Engineering", "Communications Engineering", "Nachrichtentechnik"],
+      "closelyRelated": ["Electrical Engineering"],
+      "broaderRelated": ["Embedded Systems"]
+    },
+    {
+      "name": "Automotive Engineering",
+      "category": "Engineering",
+      "aliases": ["Fahrzeugtechnik", "Vehicle Engineering", "Automotive Systems"],
+      "closelyRelated": ["Mechanical Engineering"],
+      "broaderRelated": ["Mechatronics"]
+    },
+    {
+      "name": "Civil Engineering",
+      "category": "Engineering",
+      "aliases": ["Bauingenieurwesen", "Structural Engineering"],
+      "closelyRelated": [],
+      "broaderRelated": []
+    },
+    {
+      "name": "Industrial Engineering",
+      "category": "Engineering",
+      "aliases": ["Wirtschaftsingenieurwesen", "Industrial Engineering and Management", "Engineering Management"],
+      "closelyRelated": [],
+      "broaderRelated": ["Mechanical Engineering", "Business Administration", "Supply Chain Management"]
+    },
+    {
+      "name": "Renewable Energy",
+      "category": "Engineering",
+      "aliases": ["Renewable Energies", "Erneuerbare Energien", "Sustainable Energy", "Energy Systems"],
+      "closelyRelated": [],
+      "broaderRelated": ["Electrical Engineering", "Mechanical Engineering"]
+    },
+    {
+      "name": "Business Administration",
+      "category": "Business",
+      "aliases": ["MBA", "Business Management", "General Management", "BWL", "Betriebswirtschaftslehre", "Betriebswirtschaft"],
+      "closelyRelated": ["International Business"],
+      "broaderRelated": ["Finance", "Marketing", "Supply Chain Management"]
+    },
+    {
+      "name": "International Business",
+      "category": "Business",
+      "aliases": ["International Management", "Global Business"],
+      "closelyRelated": ["Business Administration"],
+      "broaderRelated": ["Marketing"]
+    },
+    {
+      "name": "Finance",
+      "category": "Business",
+      "aliases": ["Financial Management", "Banking and Finance", "Finanzwirtschaft", "Corporate Finance"],
+      "closelyRelated": ["Accounting"],
+      "broaderRelated": ["Economics", "Business Administration"]
+    },
+    {
+      "name": "Accounting",
+      "category": "Business",
+      "aliases": ["Accountancy", "Rechnungswesen", "Accounting and Finance"],
+      "closelyRelated": ["Finance"],
+      "broaderRelated": ["Business Administration"]
+    },
+    {
+      "name": "Economics",
+      "category": "Business",
+      "aliases": ["Volkswirtschaftslehre", "VWL", "Economic Sciences"],
+      "closelyRelated": [],
+      "broaderRelated": ["Finance"]
+    },
+    {
+      "name": "Marketing",
+      "category": "Business",
+      "aliases": ["Digital Marketing", "Marketing Management"],
+      "closelyRelated": [],
+      "broaderRelated": ["Business Administration"]
+    },
+    {
+      "name": "Supply Chain Management",
+      "category": "Business",
+      "aliases": ["Supply Chain", "Logistics", "Logistik", "Logistics Management"],
+      "closelyRelated": [],
+      "broaderRelated": ["Business Administration", "Industrial Engineering"]
+    },
+    {
+      "name": "Biotechnology",
+      "category": "Life Sciences",
+      "aliases": ["Biotech", "Biotechnologie"],
+      "closelyRelated": ["Bioinformatics"],
+      "broaderRelated": []
+    },
+    {
+      "name": "Bioinformatics",
+      "category": "Life Sciences",
+      "aliases": ["Bioinformatik", "Computational Biology"],
+      "closelyRelated": ["Biotechnology"],
+      "broaderRelated": ["Data Science"]
+    },
+    {
+      "name": "Health Sciences",
+      "category": "Health",
+      "aliases": ["Health Science", "Gesundheitswissenschaften"],
+      "closelyRelated": ["Public Health"],
+      "broaderRelated": []
+    },
+    {
+      "name": "Public Health",
+      "category": "Health",
+      "aliases": ["Global Health", "Öffentliche Gesundheit"],
+      "closelyRelated": ["Health Sciences"],
+      "broaderRelated": []
+    }
+  ]
+}

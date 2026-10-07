@@ -23,11 +23,23 @@ import type {
   AssessmentResult,
   Country,
   Course,
+  CourseSearchParams,
   DashboardData,
   DocumentRecord,
+  ExplorerCourse,
+  ExplorerFacets,
+  ExplorerItems,
+  ExplorerUniversity,
   FollowUp,
   Notification,
   Payment,
+  SearchAnalyticsEntry,
+  SearchInfo,
+  SearchMatch,
+  SearchPage,
+  SearchTag,
+  SearchTagInput,
+  SearchTagRelation,
   Student,
   University,
   UniversityCourse,
@@ -299,6 +311,44 @@ interface ItemResponse<T> {
   data: T;
 }
 
+/** List endpoints called with ?q / ?page return the ranked page plus search details. */
+interface SearchResponse<T> extends ListResponse<T> {
+  total: number;
+  page: number;
+  limit: number;
+  search: SearchInfo | null;
+}
+
+const searchQuery = ({ q, status, page, limit }: CourseSearchParams) => {
+  const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+  if (q?.trim()) params.set("q", q.trim());
+  if (status && status !== "All") params.set("status", status);
+  return params.toString();
+};
+
+/** Mock mode: plain substring search, no tag expansion. */
+const mockSearchPage = <T>(
+  records: T[],
+  { q, status, page, limit }: CourseSearchParams,
+  haystack: (record: T) => string,
+  recordStatus: (record: T) => string | undefined,
+): SearchPage<T> => {
+  const query = q?.trim().toLowerCase() ?? "";
+  const matches = records.filter(
+    (record) =>
+      haystack(record).toLowerCase().includes(query) &&
+      (!status || status === "All" || recordStatus(record) === status),
+  );
+
+  return {
+    data: matches.slice((page - 1) * limit, page * limit),
+    total: matches.length,
+    page,
+    limit,
+    search: null,
+  };
+};
+
 interface MongoRecord {
   _id: string;
   id?: string;
@@ -483,20 +533,56 @@ interface CourseRecord extends MongoRecord {
   requirements?: string;
   notes?: string;
   status?: string;
+  field?: string;
+  customSearchTags?: string[];
+  searchTags?: string[];
+  searchMatch?: SearchMatch;
 }
 
-const toCourse = (record: CourseRecord): Course => ({
-  id: recordId(record),
-  name: record.name,
-  degree: text(record.degree),
-  specialization: text(record.specialization),
-  country: text(record.country),
-  duration: text(record.duration),
-  language: text(record.language),
-  requirements: text(record.requirements),
-  notes: text(record.notes),
-  status: text(record.status),
-});
+const toCourse = (record: CourseRecord): Course => {
+  const course: Course = {
+    id: recordId(record),
+    name: record.name,
+    degree: text(record.degree),
+    specialization: text(record.specialization),
+    country: text(record.country),
+    duration: text(record.duration),
+    language: text(record.language),
+    requirements: text(record.requirements),
+    notes: text(record.notes),
+    status: text(record.status),
+    customSearchTags: record.customSearchTags ?? [],
+    searchTags: record.searchTags ?? [],
+  };
+  if (record.field) course.field = record.field;
+  if (record.searchMatch) course.searchMatch = record.searchMatch;
+  return course;
+};
+
+interface SearchTagRecord extends MongoRecord {
+  name: string;
+  key: string;
+  aliases?: string[];
+  related?: { tag: (MongoRecord & { name?: string }) | null; relation: SearchTagRelation }[];
+  category?: string;
+  status?: "active" | "inactive";
+}
+
+const toSearchTag = (record: SearchTagRecord): SearchTag => {
+  const tag: SearchTag = {
+    id: record._id,
+    key: record.key,
+    name: record.name,
+    aliases: record.aliases ?? [],
+    // Relations to deleted tags come back unpopulated (null) and are skipped
+    related: (record.related ?? []).flatMap((item) =>
+      item.tag ? [{ id: item.tag._id, name: text(item.tag.name), relation: item.relation }] : [],
+    ),
+    status: record.status ?? "active",
+  };
+  if (record.category) tag.category = record.category;
+  return tag;
+};
 
 /** GET /university-courses populates universityId with the University document. */
 interface UniversityCourseRecord
@@ -613,6 +699,47 @@ export const courseService = {
     const response = await apiRequest<ListResponse<CourseRecord>>("/courses");
     return response.data.map(toCourse);
   },
+
+  /** Ranked search with related search tags, filtered and paginated on the server. */
+  searchCourses: async (params: CourseSearchParams): Promise<SearchPage<Course>> => {
+    if (apiConfig.useMockData) {
+      return wait(
+        mockSearchPage(
+          mockCourses,
+          params,
+          (course) => `${course.name} ${course.country} ${course.specialization}`,
+          (course) => course.status,
+        ),
+      );
+    }
+
+    const response = await apiRequest<SearchResponse<CourseRecord>>(
+      `/courses?${searchQuery(params)}`,
+    );
+    return { ...response, data: response.data.map(toCourse) };
+  },
+
+  createCourse: async (data: Partial<Course>): Promise<Course> => {
+    if (apiConfig.useMockData) return wait({ ...data, id: `CRS-${Date.now()}` } as Course);
+
+    const response = await apiRequest<ItemResponse<CourseRecord>>("/courses", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    return toCourse(response.data);
+  },
+
+  updateCourse: async (id: string, data: Partial<Course>): Promise<Course> => {
+    if (apiConfig.useMockData) {
+      return wait({ ...mockCourses.find((course) => course.id === id), ...data } as Course);
+    }
+
+    const response = await apiRequest<ItemResponse<CourseRecord>>(`/courses/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+    return toCourse(response.data);
+  },
 };
 
 export const universityCourseService = {
@@ -621,6 +748,107 @@ export const universityCourseService = {
 
     const response = await apiRequest<ListResponse<UniversityCourseRecord>>("/university-courses");
     return response.data.map(toUniversityCourse);
+  },
+
+  searchUniversityCourses: async (
+    params: CourseSearchParams,
+  ): Promise<SearchPage<UniversityCourse>> => {
+    if (apiConfig.useMockData) {
+      return wait(
+        mockSearchPage(
+          mockUniversityCourses,
+          params,
+          (course) =>
+            `${course.courseName} ${course.specialization ?? ""} ${course.universityName ?? ""}`,
+          (course) => course.status,
+        ),
+      );
+    }
+
+    const response = await apiRequest<SearchResponse<UniversityCourseRecord>>(
+      `/university-courses?${searchQuery(params)}`,
+    );
+    return { ...response, data: response.data.map(toUniversityCourse) };
+  },
+
+  /** Pass universityExternalId (the university's readable id); the server links it. */
+  createUniversityCourse: async (
+    data: Partial<UniversityCourse> & { universityExternalId?: string },
+  ): Promise<UniversityCourse> => {
+    if (apiConfig.useMockData) {
+      return wait({ ...data, id: data.id ?? `UC-${Date.now()}` } as UniversityCourse);
+    }
+
+    const response = await apiRequest<ItemResponse<UniversityCourseRecord>>("/university-courses", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    return toUniversityCourse(response.data);
+  },
+
+  updateUniversityCourse: async (
+    id: string,
+    data: Partial<UniversityCourse>,
+  ): Promise<UniversityCourse> => {
+    if (apiConfig.useMockData) {
+      return wait({
+        ...mockUniversityCourses.find((course) => course.id === id),
+        ...data,
+      } as UniversityCourse);
+    }
+
+    const response = await apiRequest<ItemResponse<UniversityCourseRecord>>(
+      `/university-courses/${id}`,
+      { method: "PATCH", body: JSON.stringify(data) },
+    );
+    return toUniversityCourse(response.data);
+  },
+};
+
+/** Shared search vocabulary (backend: /search-tags). Not available in mock mode. */
+export const searchTagService = {
+  getSearchTags: async (): Promise<SearchTag[]> => {
+    if (apiConfig.useMockData) return wait([]);
+
+    const response = await apiRequest<ListResponse<SearchTagRecord>>("/search-tags?limit=500");
+    return response.data.map(toSearchTag);
+  },
+
+  createSearchTag: async (data: SearchTagInput): Promise<SearchTag> => {
+    const response = await apiRequest<ItemResponse<SearchTagRecord>>("/search-tags", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    return toSearchTag(response.data);
+  },
+
+  updateSearchTag: async (id: string, data: SearchTagInput): Promise<SearchTag> => {
+    const response = await apiRequest<ItemResponse<SearchTagRecord>>(`/search-tags/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+    return toSearchTag(response.data);
+  },
+
+  deleteSearchTag: async (id: string): Promise<void> => {
+    await apiRequest(`/search-tags/${id}`, { method: "DELETE" });
+  },
+
+  getAnalytics: async (
+    scope: "courses" | "university-courses",
+  ): Promise<{
+    topSearches: SearchAnalyticsEntry[];
+    zeroResultSearches: SearchAnalyticsEntry[];
+  }> => {
+    if (apiConfig.useMockData) return wait({ topSearches: [], zeroResultSearches: [] });
+
+    const response = await apiRequest<
+      ItemResponse<{
+        topSearches: SearchAnalyticsEntry[];
+        zeroResultSearches: SearchAnalyticsEntry[];
+      }>
+    >(`/search-tags/analytics?scope=${scope}&limit=8`);
+    return response.data;
   },
 };
 
@@ -649,5 +877,58 @@ export const assessmentService = {
     ]);
 
     return buildAssessment(student, universities, countries, documents);
+  },
+};
+
+/* =========================================================
+   UNIVERSITY & COURSE EXPLORER (backend: /explorer)
+   Search, filters, sorting and pagination run on the server.
+========================================================= */
+
+const requireApi = () => {
+  if (apiConfig.useMockData) {
+    throw new Error("The explorer needs the backend API (set VITE_USE_MOCK_DATA=false).");
+  }
+};
+
+export const explorerService = {
+  searchUniversities: async (query: string): Promise<SearchPage<ExplorerUniversity>> => {
+    requireApi();
+    return apiRequest<SearchResponse<ExplorerUniversity>>(`/explorer/universities?${query}`);
+  },
+
+  searchCourses: async (query: string): Promise<SearchPage<ExplorerCourse>> => {
+    requireApi();
+    return apiRequest<SearchResponse<ExplorerCourse>>(`/explorer/courses?${query}`);
+  },
+
+  getFacets: async (): Promise<ExplorerFacets> => {
+    requireApi();
+    return (await apiRequest<ItemResponse<ExplorerFacets>>("/explorer/facets")).data;
+  },
+
+  getUniversity: async (id: string): Promise<ExplorerUniversity> => {
+    requireApi();
+    return (
+      await apiRequest<ItemResponse<ExplorerUniversity>>(
+        `/explorer/universities/${encodeURIComponent(id)}`,
+      )
+    ).data;
+  },
+
+  getCourse: async (id: string): Promise<ExplorerCourse> => {
+    requireApi();
+    return (
+      await apiRequest<ItemResponse<ExplorerCourse>>(`/explorer/courses/${encodeURIComponent(id)}`)
+    ).data;
+  },
+
+  /** Several records at once, in the given order (compare / presentation). */
+  getItems: async (ids: { universities: string[]; courses: string[] }): Promise<ExplorerItems> => {
+    requireApi();
+    const params = new URLSearchParams();
+    if (ids.universities.length) params.set("universities", ids.universities.join(","));
+    if (ids.courses.length) params.set("courses", ids.courses.join(","));
+    return (await apiRequest<ItemResponse<ExplorerItems>>(`/explorer/items?${params}`)).data;
   },
 };

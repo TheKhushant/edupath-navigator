@@ -5,6 +5,7 @@ const XLSX = require("xlsx");
 
 const University = require("../models/University");
 const ExcelImport = require("../models/ExcelImport");
+const { retagModel } = require("./courseSearch");
 const {
   clean,
   normalizeName,
@@ -1670,6 +1671,14 @@ async function executeImport(plan) {
     }
   } finally {
     await session.endSession();
+  }
+
+  // bulkWrite updates skip Mongoose middleware; refresh search tags of changed
+  // universities (popular courses / names). Never fails the import itself.
+  if (updateOps.length) {
+    await retagModel(University).catch((error) =>
+      console.error("Search tag refresh after import failed:", error.message),
+    );
   }
 
   const updatedDocs = await University.find(

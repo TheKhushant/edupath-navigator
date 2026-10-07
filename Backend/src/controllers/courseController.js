@@ -1,15 +1,29 @@
 const Course = require("../models/Course");
 const { idFilter } = require("../utils/idFilter");
+const { pickFilters, parsePaging, searchCollection } = require("../services/courseSearch");
+
+// Optional exact-match query filters, e.g. ?status=Active&country=Germany
+const FILTER_FIELDS = ["status", "country", "degree", "level", "field", "language"];
 
 // GET all courses
+// ?q=      ranked search with related search tags (see services/courseSearch.js)
+// ?page=&limit= pagination; without them every course is returned (original behaviour)
 const getCourses = async (req, res) => {
   try {
-    const courses = await Course.find().sort({ createdAt: -1 });
+    const { data, total, page, limit, search } = await searchCollection(Course, {
+      q: req.query.q,
+      filter: pickFilters(req.query, FILTER_FIELDS),
+      paging: parsePaging(req.query),
+    });
 
     res.status(200).json({
       success: true,
-      count: courses.length,
-      data: courses,
+      count: data.length,
+      total,
+      page,
+      limit,
+      data,
+      search,
     });
   } catch (error) {
     res.status(500).json({
