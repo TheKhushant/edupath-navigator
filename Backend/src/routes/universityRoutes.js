@@ -1,4 +1,6 @@
 const express = require("express");
+const University = require("../models/University");
+const { bulkDeleteHandler } = require("../utils/bulkDelete");
 
 const {
   getUniversities,
@@ -13,6 +15,8 @@ const {
   downloadTemplate,
   previewImport,
   confirmImport,
+  importProgress,
+  listCustomFields,
 } = require("../controllers/universityImportController");
 
 const router = express.Router();
@@ -21,10 +25,13 @@ const router = express.Router();
 router.get("/import/template", downloadTemplate);
 router.post("/import/preview", readUpload, previewImport);
 router.post("/import/confirm", readUpload, confirmImport);
+router.get("/import/progress/:progressId", importProgress);
+router.get("/import/custom-fields", listCustomFields);
 
 router.get("/", getUniversities);
 router.get("/:id", getUniversityById);
 router.post("/", createUniversity);
+router.post("/bulk-delete", bulkDeleteHandler(University, "universities"));
 router.patch("/:id", updateUniversity);
 router.delete("/:id", deleteUniversity);
 

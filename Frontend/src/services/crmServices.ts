@@ -16,6 +16,8 @@ import {
   mockUniversityCourses,
 } from "@/data/mockData";
 import type {
+  ExcelCustomFieldDefinition,
+  ExcelImportProgress,
   ExcelImportOptions,
   ExcelImportPreview,
   ExcelImportResult,
@@ -23,11 +25,23 @@ import type {
   AssessmentResult,
   Country,
   Course,
+  CourseSearchParams,
   DashboardData,
   DocumentRecord,
+  ExplorerCourse,
+  ExplorerFacets,
+  ExplorerItems,
+  ExplorerUniversity,
   FollowUp,
   Notification,
   Payment,
+  SearchAnalyticsEntry,
+  SearchInfo,
+  SearchMatch,
+  SearchPage,
+  SearchTag,
+  SearchTagInput,
+  SearchTagRelation,
   Student,
   University,
   UniversityCourse,
@@ -39,7 +53,43 @@ const wait = async <T>(value: T): Promise<T> => {
   await new Promise((resolve) => setTimeout(resolve, 120));
   return clone(value);
 };
+/* =========================================================
+   BULK DELETE (POST /<resource>/bulk-delete, at most 500 ids per call)
+========================================================= */
+
+export interface BulkDeleteResult {
+  deleted: number;
+  deletedIds: string[];
+  /** Ids that matched no record (e.g. already deleted). */
+  notFound: string[];
+}
+
+const BULK_DELETE_BATCH = 500;
+
+async function bulkDelete(resource: string, ids: string[]): Promise<BulkDeleteResult> {
+  if (apiConfig.useMockData) return wait({ deleted: ids.length, deletedIds: ids, notFound: [] });
+
+  const total: BulkDeleteResult = { deleted: 0, deletedIds: [], notFound: [] };
+
+  for (let start = 0; start < ids.length; start += BULK_DELETE_BATCH) {
+    const response = await apiRequest<{ success: boolean; data: BulkDeleteResult }>(
+      `/${resource}/bulk-delete`,
+      {
+        method: "POST",
+        body: JSON.stringify({ ids: ids.slice(start, start + BULK_DELETE_BATCH) }),
+      },
+    );
+    total.deleted += response.data.deleted;
+    total.deletedIds.push(...response.data.deletedIds);
+    total.notFound.push(...response.data.notFound);
+  }
+
+  return total;
+}
+
 export const universityService = {
+  bulkDeleteUniversities: (ids: string[]) => bulkDelete("universities", ids),
+
   getUniversities: async (): Promise<University[]> => {
     if (apiConfig.useMockData) {
       return wait(mockUniversities);
@@ -118,20 +168,90 @@ export const universityService = {
   },
 };
 
-/* The workbook is sent as the raw request body; options go in the query string. */
-const importQuery = (file: File, options: ExcelImportOptions, extra: Record<string, string> = {}) =>
-  new URLSearchParams({
+/*
+ * The workbook is sent as the raw request body; options go in the query string.
+ * Column selections (if any) are UTF-8 JSON placed in front of the workbook,
+ * with their byte length in ?selectionsLength (see universityImportController).
+ */
+const importRequest = (
+  file: File,
+  options: ExcelImportOptions,
+  extra: Record<string, string> = {},
+): { query: string; body: Blob | File } => {
+  const params = new URLSearchParams({
     fileName: file.name,
     mode: options.mode,
     defaultCountry: options.defaultCountry,
+    ...(options.progressId ? { progressId: options.progressId } : {}),
     ...extra,
-  }).toString();
+  });
+
+  if (!options.selections) return { query: params.toString(), body: file };
+
+  const json = new TextEncoder().encode(JSON.stringify(options.selections));
+  params.set("selectionsLength", String(json.byteLength));
+
+  return { query: params.toString(), body: new Blob([json, file]) };
+};
 
 const requireBackend = () => {
   if (apiConfig.useMockData) {
     throw new Error("Excel import needs the backend. Set VITE_USE_MOCK_DATA=false.");
   }
 };
+
+/**
+ * POST with upload progress (fetch cannot report it). Same JSON error
+ * handling as apiRequest.
+ */
+const postWithUploadProgress = <T>(
+  path: string,
+  body: Blob | File,
+  onUploadProgress: (percent: number) => void,
+): Promise<T> =>
+  new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open("POST", `${apiConfig.baseUrl}${path}`);
+    request.setRequestHeader("Content-Type", "application/octet-stream");
+
+    request.upload.onprogress = (event) => {
+      if (event.lengthComputable && event.total > 0) {
+        onUploadProgress(Math.round((event.loaded / event.total) * 100));
+      }
+    };
+
+    request.onload = () => {
+      let data: { message?: string; error?: string } | null = null;
+      try {
+        data = JSON.parse(request.responseText);
+      } catch {
+        data = null;
+      }
+
+      if (request.status >= 200 && request.status < 300) {
+        resolve(data as T);
+      } else {
+        reject(
+          new Error(data?.message || data?.error || `Request failed with status ${request.status}`),
+        );
+      }
+    };
+
+    // Small bodies may not fire progress events; the upload has finished here
+    request.upload.onload = () => onUploadProgress(100);
+
+    request.onerror = () => reject(new Error("Network error: the server could not be reached."));
+    request.send(body);
+  });
+
+const postImport = <T>(path: string, body: Blob | File, options: ExcelImportOptions) =>
+  options.onUploadProgress
+    ? postWithUploadProgress<T>(path, body, options.onUploadProgress)
+    : apiRequest<T>(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/octet-stream" },
+        body,
+      });
 
 export const universityImportService = {
   downloadTemplate: async (): Promise<Blob> => {
@@ -143,35 +263,61 @@ export const universityImportService = {
   previewImport: async (file: File, options: ExcelImportOptions): Promise<ExcelImportPreview> => {
     requireBackend();
 
-    const response = await apiRequest<{ success: boolean; data: ExcelImportPreview }>(
-      `/universities/import/preview?${importQuery(file, options)}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/octet-stream" },
-        body: file,
-      },
+    const { query, body } = importRequest(file, options);
+    const response = await postImport<{ success: boolean; data: ExcelImportPreview }>(
+      `/universities/import/preview?${query}`,
+      body,
+      options,
     );
 
     return response.data;
   },
 
+  /** Saved custom field definitions (labels and types for customFields values). */
+  getCustomFields: async (): Promise<ExcelCustomFieldDefinition[]> => {
+    requireBackend();
+    const response = await apiRequest<{ success: boolean; data: ExcelCustomFieldDefinition[] }>(
+      "/universities/import/custom-fields",
+    );
+    return response.data;
+  },
+
+  /** Server-side progress of a running preview/import, or null when unknown. */
+  getProgress: async (progressId: string): Promise<ExcelImportProgress | null> => {
+    // Plain fetch: "not started yet" (404) is expected and is not logged as an API error
+    try {
+      const response = await fetch(
+        `${apiConfig.baseUrl}/universities/import/progress/${encodeURIComponent(progressId)}`,
+      );
+      if (!response.ok) return null;
+      const body = (await response.json()) as { data?: ExcelImportProgress };
+      return body.data ?? null;
+    } catch {
+      return null;
+    }
+  },
+
   /** Re-validates the same file on the server and imports the valid rows. */
   confirmImport: async (
     file: File,
-    options: ExcelImportOptions & { expectedHash: string; confirmOverwrite: boolean },
+    options: ExcelImportOptions & {
+      expectedHash: string;
+      confirmOverwrite: boolean;
+      /** Required when the import creates new custom fields. */
+      confirmCustomFields?: boolean;
+    },
   ): Promise<ExcelImportResult> => {
     requireBackend();
 
-    const response = await apiRequest<{ success: boolean; data: ExcelImportResult }>(
-      `/universities/import/confirm?${importQuery(file, options, {
-        expectedHash: options.expectedHash,
-        confirmOverwrite: String(options.confirmOverwrite),
-      })}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/octet-stream" },
-        body: file,
-      },
+    const { query, body } = importRequest(file, options, {
+      expectedHash: options.expectedHash,
+      confirmOverwrite: String(options.confirmOverwrite),
+      confirmCustomFields: String(options.confirmCustomFields ?? false),
+    });
+    const response = await postImport<{ success: boolean; data: ExcelImportResult }>(
+      `/universities/import/confirm?${query}`,
+      body,
+      options,
     );
 
     return response.data;
@@ -203,6 +349,8 @@ export const countryService = {
 };
 
 export const studentService = {
+  bulkDeleteStudents: (ids: string[]) => bulkDelete("students", ids),
+
   getStudents: async (): Promise<Student[]> => {
     if (apiConfig.useMockData) {
       return wait(mockStudents);
@@ -298,6 +446,44 @@ interface ItemResponse<T> {
   success: boolean;
   data: T;
 }
+
+/** List endpoints called with ?q / ?page return the ranked page plus search details. */
+interface SearchResponse<T> extends ListResponse<T> {
+  total: number;
+  page: number;
+  limit: number;
+  search: SearchInfo | null;
+}
+
+const searchQuery = ({ q, status, page, limit }: CourseSearchParams) => {
+  const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+  if (q?.trim()) params.set("q", q.trim());
+  if (status && status !== "All") params.set("status", status);
+  return params.toString();
+};
+
+/** Mock mode: plain substring search, no tag expansion. */
+const mockSearchPage = <T>(
+  records: T[],
+  { q, status, page, limit }: CourseSearchParams,
+  haystack: (record: T) => string,
+  recordStatus: (record: T) => string | undefined,
+): SearchPage<T> => {
+  const query = q?.trim().toLowerCase() ?? "";
+  const matches = records.filter(
+    (record) =>
+      haystack(record).toLowerCase().includes(query) &&
+      (!status || status === "All" || recordStatus(record) === status),
+  );
+
+  return {
+    data: matches.slice((page - 1) * limit, page * limit),
+    total: matches.length,
+    page,
+    limit,
+    search: null,
+  };
+};
 
 interface MongoRecord {
   _id: string;
@@ -483,20 +669,56 @@ interface CourseRecord extends MongoRecord {
   requirements?: string;
   notes?: string;
   status?: string;
+  field?: string;
+  customSearchTags?: string[];
+  searchTags?: string[];
+  searchMatch?: SearchMatch;
 }
 
-const toCourse = (record: CourseRecord): Course => ({
-  id: recordId(record),
-  name: record.name,
-  degree: text(record.degree),
-  specialization: text(record.specialization),
-  country: text(record.country),
-  duration: text(record.duration),
-  language: text(record.language),
-  requirements: text(record.requirements),
-  notes: text(record.notes),
-  status: text(record.status),
-});
+const toCourse = (record: CourseRecord): Course => {
+  const course: Course = {
+    id: recordId(record),
+    name: record.name,
+    degree: text(record.degree),
+    specialization: text(record.specialization),
+    country: text(record.country),
+    duration: text(record.duration),
+    language: text(record.language),
+    requirements: text(record.requirements),
+    notes: text(record.notes),
+    status: text(record.status),
+    customSearchTags: record.customSearchTags ?? [],
+    searchTags: record.searchTags ?? [],
+  };
+  if (record.field) course.field = record.field;
+  if (record.searchMatch) course.searchMatch = record.searchMatch;
+  return course;
+};
+
+interface SearchTagRecord extends MongoRecord {
+  name: string;
+  key: string;
+  aliases?: string[];
+  related?: { tag: (MongoRecord & { name?: string }) | null; relation: SearchTagRelation }[];
+  category?: string;
+  status?: "active" | "inactive";
+}
+
+const toSearchTag = (record: SearchTagRecord): SearchTag => {
+  const tag: SearchTag = {
+    id: record._id,
+    key: record.key,
+    name: record.name,
+    aliases: record.aliases ?? [],
+    // Relations to deleted tags come back unpopulated (null) and are skipped
+    related: (record.related ?? []).flatMap((item) =>
+      item.tag ? [{ id: item.tag._id, name: text(item.tag.name), relation: item.relation }] : [],
+    ),
+    status: record.status ?? "active",
+  };
+  if (record.category) tag.category = record.category;
+  return tag;
+};
 
 /** GET /university-courses populates universityId with the University document. */
 interface UniversityCourseRecord
@@ -607,20 +829,166 @@ export const notificationService = {
 };
 
 export const courseService = {
+  bulkDeleteCourses: (ids: string[]) => bulkDelete("courses", ids),
+
   getCourses: async (): Promise<Course[]> => {
     if (apiConfig.useMockData) return wait(mockCourses);
 
     const response = await apiRequest<ListResponse<CourseRecord>>("/courses");
     return response.data.map(toCourse);
   },
+
+  /** Ranked search with related search tags, filtered and paginated on the server. */
+  searchCourses: async (params: CourseSearchParams): Promise<SearchPage<Course>> => {
+    if (apiConfig.useMockData) {
+      return wait(
+        mockSearchPage(
+          mockCourses,
+          params,
+          (course) => `${course.name} ${course.country} ${course.specialization}`,
+          (course) => course.status,
+        ),
+      );
+    }
+
+    const response = await apiRequest<SearchResponse<CourseRecord>>(
+      `/courses?${searchQuery(params)}`,
+    );
+    return { ...response, data: response.data.map(toCourse) };
+  },
+
+  createCourse: async (data: Partial<Course>): Promise<Course> => {
+    if (apiConfig.useMockData) return wait({ ...data, id: `CRS-${Date.now()}` } as Course);
+
+    const response = await apiRequest<ItemResponse<CourseRecord>>("/courses", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    return toCourse(response.data);
+  },
+
+  updateCourse: async (id: string, data: Partial<Course>): Promise<Course> => {
+    if (apiConfig.useMockData) {
+      return wait({ ...mockCourses.find((course) => course.id === id), ...data } as Course);
+    }
+
+    const response = await apiRequest<ItemResponse<CourseRecord>>(`/courses/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+    return toCourse(response.data);
+  },
 };
 
 export const universityCourseService = {
+  bulkDeleteUniversityCourses: (ids: string[]) => bulkDelete("university-courses", ids),
+
   getUniversityCourses: async (): Promise<UniversityCourse[]> => {
     if (apiConfig.useMockData) return wait(mockUniversityCourses);
 
     const response = await apiRequest<ListResponse<UniversityCourseRecord>>("/university-courses");
     return response.data.map(toUniversityCourse);
+  },
+
+  searchUniversityCourses: async (
+    params: CourseSearchParams,
+  ): Promise<SearchPage<UniversityCourse>> => {
+    if (apiConfig.useMockData) {
+      return wait(
+        mockSearchPage(
+          mockUniversityCourses,
+          params,
+          (course) =>
+            `${course.courseName} ${course.specialization ?? ""} ${course.universityName ?? ""}`,
+          (course) => course.status,
+        ),
+      );
+    }
+
+    const response = await apiRequest<SearchResponse<UniversityCourseRecord>>(
+      `/university-courses?${searchQuery(params)}`,
+    );
+    return { ...response, data: response.data.map(toUniversityCourse) };
+  },
+
+  /** Pass universityExternalId (the university's readable id); the server links it. */
+  createUniversityCourse: async (
+    data: Partial<UniversityCourse> & { universityExternalId?: string },
+  ): Promise<UniversityCourse> => {
+    if (apiConfig.useMockData) {
+      return wait({ ...data, id: data.id ?? `UC-${Date.now()}` } as UniversityCourse);
+    }
+
+    const response = await apiRequest<ItemResponse<UniversityCourseRecord>>("/university-courses", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    return toUniversityCourse(response.data);
+  },
+
+  updateUniversityCourse: async (
+    id: string,
+    data: Partial<UniversityCourse>,
+  ): Promise<UniversityCourse> => {
+    if (apiConfig.useMockData) {
+      return wait({
+        ...mockUniversityCourses.find((course) => course.id === id),
+        ...data,
+      } as UniversityCourse);
+    }
+
+    const response = await apiRequest<ItemResponse<UniversityCourseRecord>>(
+      `/university-courses/${id}`,
+      { method: "PATCH", body: JSON.stringify(data) },
+    );
+    return toUniversityCourse(response.data);
+  },
+};
+
+/** Shared search vocabulary (backend: /search-tags). Not available in mock mode. */
+export const searchTagService = {
+  getSearchTags: async (): Promise<SearchTag[]> => {
+    if (apiConfig.useMockData) return wait([]);
+
+    const response = await apiRequest<ListResponse<SearchTagRecord>>("/search-tags?limit=500");
+    return response.data.map(toSearchTag);
+  },
+
+  createSearchTag: async (data: SearchTagInput): Promise<SearchTag> => {
+    const response = await apiRequest<ItemResponse<SearchTagRecord>>("/search-tags", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    return toSearchTag(response.data);
+  },
+
+  updateSearchTag: async (id: string, data: SearchTagInput): Promise<SearchTag> => {
+    const response = await apiRequest<ItemResponse<SearchTagRecord>>(`/search-tags/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+    return toSearchTag(response.data);
+  },
+
+  deleteSearchTag: async (id: string): Promise<void> => {
+    await apiRequest(`/search-tags/${id}`, { method: "DELETE" });
+  },
+
+  getAnalytics: async (
+    scope: "courses" | "university-courses",
+  ): Promise<{
+    topSearches: SearchAnalyticsEntry[];
+    zeroResultSearches: SearchAnalyticsEntry[];
+  }> => {
+    if (apiConfig.useMockData) return wait({ topSearches: [], zeroResultSearches: [] });
+
+    const response = await apiRequest<
+      ItemResponse<{
+        topSearches: SearchAnalyticsEntry[];
+        zeroResultSearches: SearchAnalyticsEntry[];
+      }>
+    >(`/search-tags/analytics?scope=${scope}&limit=8`);
+    return response.data;
   },
 };
 
@@ -649,5 +1017,62 @@ export const assessmentService = {
     ]);
 
     return buildAssessment(student, universities, countries, documents);
+  },
+};
+
+/* =========================================================
+   UNIVERSITY & COURSE EXPLORER (backend: /explorer)
+   Search, filters, sorting and pagination run on the server.
+========================================================= */
+
+const requireApi = () => {
+  if (apiConfig.useMockData) {
+    throw new Error("The explorer needs the backend API (set VITE_USE_MOCK_DATA=false).");
+  }
+};
+
+export const explorerService = {
+  searchUniversities: async (query: string): Promise<SearchPage<ExplorerUniversity>> => {
+    requireApi();
+    return apiRequest<SearchResponse<ExplorerUniversity>>(`/explorer/universities?${query}`);
+  },
+
+  searchCourses: async (query: string): Promise<SearchPage<ExplorerCourse>> => {
+    requireApi();
+    return apiRequest<SearchResponse<ExplorerCourse>>(`/explorer/courses?${query}`);
+  },
+
+  getFacets: async (): Promise<ExplorerFacets> => {
+    requireApi();
+    return (await apiRequest<ItemResponse<ExplorerFacets>>("/explorer/facets")).data;
+  },
+
+  /** includeSource: also the uploaded Excel rows / extra columns (Universities "View"). */
+  getUniversity: async (
+    id: string,
+    options: { includeSource?: boolean } = {},
+  ): Promise<ExplorerUniversity> => {
+    requireApi();
+    return (
+      await apiRequest<ItemResponse<ExplorerUniversity>>(
+        `/explorer/universities/${encodeURIComponent(id)}${options.includeSource ? "?include=source" : ""}`,
+      )
+    ).data;
+  },
+
+  getCourse: async (id: string): Promise<ExplorerCourse> => {
+    requireApi();
+    return (
+      await apiRequest<ItemResponse<ExplorerCourse>>(`/explorer/courses/${encodeURIComponent(id)}`)
+    ).data;
+  },
+
+  /** Several records at once, in the given order (compare / presentation). */
+  getItems: async (ids: { universities: string[]; courses: string[] }): Promise<ExplorerItems> => {
+    requireApi();
+    const params = new URLSearchParams();
+    if (ids.universities.length) params.set("universities", ids.universities.join(","));
+    if (ids.courses.length) params.set("courses", ids.courses.join(","));
+    return (await apiRequest<ItemResponse<ExplorerItems>>(`/explorer/items?${params}`)).data;
   },
 };

@@ -1,14 +1,58 @@
 const University = require("../models/University");
+const UniversityCourse = require("../models/UniversityCourse");
+
+const COURSE_NAMES_PER_UNIVERSITY = 10;
+
+/**
+ * Adds the courses stored for each university (UniversityCourse records linked
+ * by the universityId reference or by the readable universityExternalId):
+ * courseCount and the first courseNames, for the Universities list.
+ */
+async function withLinkedCourses(universities) {
+  if (!universities.length) return universities;
+
+  const readableIds = universities.map((university) => university.id).filter(Boolean);
+  const courses = await UniversityCourse.find(
+    {
+      $or: [
+        { universityId: { $in: universities.map((university) => university._id) } },
+        ...(readableIds.length ? [{ universityExternalId: { $in: readableIds } }] : []),
+      ],
+    },
+    { courseName: 1, universityId: 1, universityExternalId: 1 },
+  )
+    .sort({ courseName: 1 })
+    .lean();
+
+  const keyByReadableId = new Map(universities.filter((university) => university.id).map((university) => [university.id, String(university._id)]));
+  const coursesByUniversity = new Map();
+
+  for (const course of courses) {
+    const key = course.universityId ? String(course.universityId) : keyByReadableId.get(course.universityExternalId);
+    if (!key) continue;
+    if (!coursesByUniversity.has(key)) coursesByUniversity.set(key, new Map());
+    coursesByUniversity.get(key).set(String(course._id), course.courseName);
+  }
+
+  return universities.map((university) => {
+    const names = [...(coursesByUniversity.get(String(university._id))?.values() ?? [])];
+    return {
+      ...university,
+      courseCount: names.length,
+      courseNames: names.slice(0, COURSE_NAMES_PER_UNIVERSITY),
+    };
+  });
+}
 
 // GET all universities
 const getUniversities = async (req, res) => {
   try {
-    const universities = await University.find().sort({ createdAt: -1 });
+    const universities = await University.find().sort({ createdAt: -1 }).lean();
 
     res.status(200).json({
       success: true,
       count: universities.length,
-      data: universities,
+      data: await withLinkedCourses(universities),
     });
   } catch (error) {
     res.status(500).json({
@@ -24,7 +68,7 @@ const getUniversityById = async (req, res) => {
   try {
     const university = await University.findOne({
       id: req.params.id,
-    });
+    }).lean();
 
     if (!university) {
       return res.status(404).json({
@@ -35,7 +79,7 @@ const getUniversityById = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: university,
+      data: (await withLinkedCourses([university]))[0],
     });
   } catch (error) {
     res.status(500).json({
@@ -46,10 +90,22 @@ const getUniversityById = async (req, res) => {
   }
 };
 
+// customFields are written only by the Excel import, which validates them
+// against their CustomFieldDefinition; the plain CRUD body cannot set them.
+const withoutCustomFields = (body = {}) =>
+  Object.fromEntries(
+    Object.entries(body ?? {})
+      .filter(([key]) => key !== "customFields" && !key.startsWith("customFields."))
+      // Also inside update operators such as $set / $unset
+      .map(([key, value]) =>
+        key.startsWith("$") && value && typeof value === "object" ? [key, withoutCustomFields(value)] : [key, value],
+      ),
+  );
+
 // CREATE university
 const createUniversity = async (req, res) => {
   try {
-    const university = await University.create(req.body);
+    const university = await University.create(withoutCustomFields(req.body));
 
     res.status(201).json({
       success: true,
@@ -70,7 +126,7 @@ const updateUniversity = async (req, res) => {
   try {
     const university = await University.findOneAndUpdate(
       { id: req.params.id },
-      req.body,
+      withoutCustomFields(req.body),
       {
         new: true,
         runValidators: true,

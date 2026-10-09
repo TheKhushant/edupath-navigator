@@ -13,6 +13,8 @@ const paymentRoutes = require("./routes/paymentRoutes");
 const followUpRoutes = require("./routes/followUpRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
+const searchTagRoutes = require("./routes/searchTagRoutes");
+const explorerRoutes = require("./routes/explorerRoutes");
 
 const app = express();
 
@@ -20,7 +22,7 @@ const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:8080",
   "https://edupath-navigator-enbk.vercel.app",
-  "https://edupath-navigator-nine.vercel.app/universities",
+  "https://edupath-navigator-nine.vercel.app",
   process.env.FRONTEND_URL,
 ].filter(Boolean);
 
@@ -28,7 +30,7 @@ app.use(
   cors({
     origin: [
       process.env.FRONTEND_URL || "http://localhost:5173",
-      "http://localhost:8080", "https://edupath-navigator-enbk.vercel.app","https://edupath-navigator-nine.vercel.app/universities",
+      "http://localhost:8080", "https://edupath-navigator-enbk.vercel.app", "https://edupath-navigator-nine.vercel.app",
     ],
     credentials: false,
   })
@@ -50,6 +52,8 @@ app.use("/api/payments", paymentRoutes);
 app.use("/api/follow-ups", followUpRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/search-tags", searchTagRoutes);
+app.use("/api/explorer", explorerRoutes);
 
 // Health check
 app.get("/api/health", (req, res) => {

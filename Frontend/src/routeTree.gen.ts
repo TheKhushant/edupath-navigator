@@ -14,6 +14,7 @@ import { Route as ApplicationsRouteImport } from './routes/applications'
 import { Route as AssessmentRouteImport } from './routes/assessment'
 import { Route as CoursesRouteImport } from './routes/courses'
 import { Route as DocumentsRouteImport } from './routes/documents'
+import { Route as ExplorerRouteImport } from './routes/explorer'
 import { Route as FollowUpsRouteImport } from './routes/follow-ups'
 import { Route as PaymentsRouteImport } from './routes/payments'
 import { Route as PipelinesRouteImport } from './routes/pipelines'
@@ -23,6 +24,7 @@ import { Route as StudentsRouteImport } from './routes/students'
 import { Route as UniversitiesRouteImport } from './routes/universities'
 import { Route as UniversityMatcherRouteImport } from './routes/university-matcher'
 import { Route as VisaRouteImport } from './routes/visa'
+import { Route as ExplorerPresentRouteImport } from './routes/explorer_.present'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -47,6 +49,11 @@ const CoursesRoute = CoursesRouteImport.update({
 const DocumentsRoute = DocumentsRouteImport.update({
   id: '/documents',
   path: '/documents',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ExplorerRoute = ExplorerRouteImport.update({
+  id: '/explorer',
+  path: '/explorer',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FollowUpsRoute = FollowUpsRouteImport.update({
@@ -94,6 +101,11 @@ const VisaRoute = VisaRouteImport.update({
   path: '/visa',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ExplorerPresentRoute = ExplorerPresentRouteImport.update({
+  id: '/explorer_/present',
+  path: '/explorer/present',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -101,6 +113,7 @@ export interface FileRoutesByFullPath {
   '/assessment': typeof AssessmentRoute
   '/courses': typeof CoursesRoute
   '/documents': typeof DocumentsRoute
+  '/explorer': typeof ExplorerRoute
   '/follow-ups': typeof FollowUpsRoute
   '/payments': typeof PaymentsRoute
   '/pipelines': typeof PipelinesRoute
@@ -110,6 +123,7 @@ export interface FileRoutesByFullPath {
   '/universities': typeof UniversitiesRoute
   '/university-matcher': typeof UniversityMatcherRoute
   '/visa': typeof VisaRoute
+  '/explorer/present': typeof ExplorerPresentRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -117,6 +131,7 @@ export interface FileRoutesByTo {
   '/assessment': typeof AssessmentRoute
   '/courses': typeof CoursesRoute
   '/documents': typeof DocumentsRoute
+  '/explorer': typeof ExplorerRoute
   '/follow-ups': typeof FollowUpsRoute
   '/payments': typeof PaymentsRoute
   '/pipelines': typeof PipelinesRoute
@@ -126,6 +141,7 @@ export interface FileRoutesByTo {
   '/universities': typeof UniversitiesRoute
   '/university-matcher': typeof UniversityMatcherRoute
   '/visa': typeof VisaRoute
+  '/explorer/present': typeof ExplorerPresentRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -134,6 +150,7 @@ export interface FileRoutesById {
   '/assessment': typeof AssessmentRoute
   '/courses': typeof CoursesRoute
   '/documents': typeof DocumentsRoute
+  '/explorer': typeof ExplorerRoute
   '/follow-ups': typeof FollowUpsRoute
   '/payments': typeof PaymentsRoute
   '/pipelines': typeof PipelinesRoute
@@ -143,6 +160,7 @@ export interface FileRoutesById {
   '/universities': typeof UniversitiesRoute
   '/university-matcher': typeof UniversityMatcherRoute
   '/visa': typeof VisaRoute
+  '/explorer_/present': typeof ExplorerPresentRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -152,6 +170,7 @@ export interface FileRouteTypes {
     | '/assessment'
     | '/courses'
     | '/documents'
+    | '/explorer'
     | '/follow-ups'
     | '/payments'
     | '/pipelines'
@@ -161,6 +180,7 @@ export interface FileRouteTypes {
     | '/universities'
     | '/university-matcher'
     | '/visa'
+    | '/explorer/present'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -168,6 +188,7 @@ export interface FileRouteTypes {
     | '/assessment'
     | '/courses'
     | '/documents'
+    | '/explorer'
     | '/follow-ups'
     | '/payments'
     | '/pipelines'
@@ -177,6 +198,7 @@ export interface FileRouteTypes {
     | '/universities'
     | '/university-matcher'
     | '/visa'
+    | '/explorer/present'
   id:
     | '__root__'
     | '/'
@@ -184,6 +206,7 @@ export interface FileRouteTypes {
     | '/assessment'
     | '/courses'
     | '/documents'
+    | '/explorer'
     | '/follow-ups'
     | '/payments'
     | '/pipelines'
@@ -193,6 +216,7 @@ export interface FileRouteTypes {
     | '/universities'
     | '/university-matcher'
     | '/visa'
+    | '/explorer_/present'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -201,6 +225,7 @@ export interface RootRouteChildren {
   AssessmentRoute: typeof AssessmentRoute
   CoursesRoute: typeof CoursesRoute
   DocumentsRoute: typeof DocumentsRoute
+  ExplorerRoute: typeof ExplorerRoute
   FollowUpsRoute: typeof FollowUpsRoute
   PaymentsRoute: typeof PaymentsRoute
   PipelinesRoute: typeof PipelinesRoute
@@ -210,6 +235,7 @@ export interface RootRouteChildren {
   UniversitiesRoute: typeof UniversitiesRoute
   UniversityMatcherRoute: typeof UniversityMatcherRoute
   VisaRoute: typeof VisaRoute
+  ExplorerPresentRoute: typeof ExplorerPresentRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -247,6 +273,13 @@ declare module '@tanstack/react-router' {
       path: '/documents'
       fullPath: '/documents'
       preLoaderRoute: typeof DocumentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/explorer': {
+      id: '/explorer'
+      path: '/explorer'
+      fullPath: '/explorer'
+      preLoaderRoute: typeof ExplorerRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/follow-ups': {
@@ -312,6 +345,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VisaRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/explorer_/present': {
+      id: '/explorer_/present'
+      path: '/explorer/present'
+      fullPath: '/explorer/present'
+      preLoaderRoute: typeof ExplorerPresentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -321,6 +361,7 @@ const rootRouteChildren: RootRouteChildren = {
   AssessmentRoute: AssessmentRoute,
   CoursesRoute: CoursesRoute,
   DocumentsRoute: DocumentsRoute,
+  ExplorerRoute: ExplorerRoute,
   FollowUpsRoute: FollowUpsRoute,
   PaymentsRoute: PaymentsRoute,
   PipelinesRoute: PipelinesRoute,
@@ -330,6 +371,7 @@ const rootRouteChildren: RootRouteChildren = {
   UniversitiesRoute: UniversitiesRoute,
   UniversityMatcherRoute: UniversityMatcherRoute,
   VisaRoute: VisaRoute,
+  ExplorerPresentRoute: ExplorerPresentRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

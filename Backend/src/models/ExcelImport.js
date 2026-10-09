@@ -49,6 +49,22 @@ const excelImportSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+
+    createdCourseIds: {
+      type: [String],
+      default: [],
+    },
+
+    updatedCourseIds: {
+      type: [String],
+      default: [],
+    },
+
+    // Custom field definitions created by this import ({ entity, key, label, type })
+    createdCustomFields: {
+      type: [mongoose.Schema.Types.Mixed],
+      default: [],
+    },
   },
   {
     timestamps: true,

@@ -11,14 +11,28 @@ const {
 // The workbook is sent as the raw request body (application/octet-stream);
 // options travel in the query string. Parsed here so a too-large upload
 // returns a JSON error instead of Express's default HTML page.
+//
+// Optional column selections (include/exclude + target field per column)
+// are sent as UTF-8 JSON in front of the workbook bytes, with their byte
+// length in ?selectionsLength=N. They can be too large for a query string
+// or header, and this keeps a single request without multipart parsing.
+const MAX_SELECTIONS_BYTES = 256 * 1024;
+
 const rawParser = express.raw({
   type: () => true,
-  limit: LIMITS.maxFileBytes,
+  limit: LIMITS.maxFileBytes + MAX_SELECTIONS_BYTES,
 });
 
 const readUpload = (req, res, next) => {
   rawParser(req, res, (error) => {
-    if (!error) return next();
+    if (!error) {
+      try {
+        splitSelections(req);
+        return next();
+      } catch (splitError) {
+        return handleError(res, splitError, "The upload could not be read.");
+      }
+    }
 
     const tooLarge = error.type === "entity.too.large";
 
@@ -31,10 +45,34 @@ const readUpload = (req, res, next) => {
   });
 };
 
+/** Moves leading selections JSON (if any) to req.columnSelections; req.body becomes the workbook. */
+function splitSelections(req) {
+  if (req.query.selectionsLength === undefined) return;
+
+  const length = Number(req.query.selectionsLength);
+  const body = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+
+  if (!Number.isInteger(length) || length <= 0 || length > MAX_SELECTIONS_BYTES || length > body.length) {
+    throw new ImportError("Column selections are missing or too large.");
+  }
+
+  try {
+    req.columnSelections = JSON.parse(body.subarray(0, length).toString("utf8"));
+  } catch {
+    throw new ImportError("Column selections are not valid JSON.");
+  }
+
+  req.body = body.subarray(length);
+}
+
+const progress = require("../services/importProgress");
+const CustomFieldDefinition = require("../models/CustomFieldDefinition");
+
 const optionsFrom = (req) => ({
   fileName: String(req.query.fileName ?? ""),
   defaultCountry: String(req.query.defaultCountry ?? ""),
   mode: req.query.mode === "update" ? "update" : "skip",
+  columnSelections: req.columnSelections,
 });
 
 const handleError = (res, error, fallback) => {
@@ -67,22 +105,53 @@ const downloadTemplate = (req, res) => {
   }
 };
 
+// GET /api/universities/import/custom-fields
+// Saved custom field definitions, so the UI can label customFields values.
+const listCustomFields = async (req, res) => {
+  try {
+    const fields = await CustomFieldDefinition.find({}, { _id: 0, entity: 1, key: 1, label: 1, type: 1 })
+      .sort({ entity: 1, label: 1 })
+      .lean();
+
+    res.status(200).json({ success: true, data: fields });
+  } catch (error) {
+    handleError(res, error, "Failed to load custom fields");
+  }
+};
+
+// GET /api/universities/import/progress/:progressId
+// Progress of a running preview/confirm that was sent with ?progressId=...
+// data is null until the request with this id has reached the server (or after it expired).
+const importProgress = (req, res) => {
+  if (!progress.isValidId(req.params.progressId)) {
+    return res.status(400).json({ success: false, message: "Invalid progress id." });
+  }
+
+  res.status(200).json({ success: true, data: progress.get(req.params.progressId) ?? null });
+};
+
 // POST /api/universities/import/preview  (does not modify MongoDB)
 const previewImport = async (req, res) => {
-  try {
-    const { preview } = await analyzeWorkbook(req.body, optionsFrom(req));
+  const update = progress.track(String(req.query.progressId ?? ""), "preview");
 
+  try {
+    const { preview } = await analyzeWorkbook(req.body, { ...optionsFrom(req), onProgress: update });
+
+    update({ phase: "done", done: true });
     res.status(200).json({ success: true, data: preview });
   } catch (error) {
+    update({ phase: "failed", done: true, error: error.message });
     handleError(res, error, "Failed to scan the Excel file");
   }
 };
 
 // POST /api/universities/import/confirm
 const confirmImport = async (req, res) => {
+  const update = progress.track(String(req.query.progressId ?? ""), "import");
+
   try {
     const options = optionsFrom(req);
-    const { preview, plan } = await analyzeWorkbook(req.body, options);
+    const { preview, plan } = await analyzeWorkbook(req.body, { ...options, onProgress: update });
 
     const expectedHash = String(req.query.expectedHash ?? "");
 
@@ -94,11 +163,26 @@ const confirmImport = async (req, res) => {
       throw new ImportError("Updating existing universities requires explicit confirmation.");
     }
 
+    if (plan.mode === "update" && plan.courseUpdates.length > 0 && req.query.confirmOverwrite !== "true") {
+      throw new ImportError("Updating existing courses requires explicit confirmation.");
+    }
+
+    if (plan.newCustomFields.length > 0 && req.query.confirmCustomFields !== "true") {
+      throw new ImportError(
+        `Creating ${plan.newCustomFields.length} new database field(s) requires explicit confirmation.`,
+      );
+    }
+
+    if (preview.mappingErrors > 0) {
+      throw new ImportError("Some selected columns are not mapped correctly. Fix the column mapping and scan again.");
+    }
+
     if (!preview.canImport) {
       throw new ImportError("There are no valid rows to import.");
     }
 
-    const result = await executeImport(plan);
+    const result = await executeImport(plan, { onProgress: update });
+    update({ phase: "done", done: true });
 
     res.status(201).json({
       success: true,
@@ -112,6 +196,13 @@ const confirmImport = async (req, res) => {
           rowsScanned: preview.summary.rowsScanned,
           imported: result.created.length,
           updated: result.updated.length,
+          // Universities that already existed and received courses (not created again)
+          universitiesLinked: preview.universities.filter((university) =>
+            university.action === "link" || (university.action === "skip" && preview.courses?.some((course) => course.universityName === university.name)),
+          ).length,
+          coursesImported: result.createdCourses.length,
+          coursesUpdated: result.updatedCourses.length,
+          importedRows: preview.importRowCount,
           skipped: preview.summary.skippedRows,
           duplicates: preview.summary.duplicateRows,
           invalid: preview.summary.invalidRows,
@@ -120,9 +211,17 @@ const confirmImport = async (req, res) => {
           warnings: preview.summary.warnings,
         },
         universities: [...result.created, ...result.updated],
+        courses: [...result.createdCourses, ...result.updatedCourses],
+        customFields: result.createdCustomFields,
+        // Rows that were not imported because of errors, with the reason and fix
+        failedRows: preview.issues
+          .filter((issue) => issue.severity === "ERROR" && issue.row !== null)
+          .slice(0, 500)
+          .map(({ sheet, row, column, message, value, suggestion }) => ({ sheet, row, column, message, value, suggestion })),
       },
     });
   } catch (error) {
+    update({ phase: "failed", done: true, error: error.message });
     handleError(res, error, "Failed to import the Excel file");
   }
 };
@@ -132,4 +231,6 @@ module.exports = {
   downloadTemplate,
   previewImport,
   confirmImport,
+  importProgress,
+  listCustomFields,
 };

@@ -1,7 +1,7 @@
 export const apiConfig = {
   baseUrl:
     import.meta.env["VITE_API_BASE_URL"] ??
-    "https://edupath-navigator2.onrender.com/api",
+    "http://localhost:5000/api",
 
   useMockData:
     (import.meta.env["VITE_USE_MOCK_DATA"] ?? "false") !== "false",

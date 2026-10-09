@@ -8,13 +8,32 @@ import {
   followupService,
   notificationService,
   paymentService,
+  searchTagService,
   studentService,
+  universityCourseService,
   universityService,
   visaService,
 } from "@/services/crmServices";
 import { useDashboard, useNotifications, useStudents } from "@/hooks/useCrm";
 import { apiConfig } from "@/lib/api";
 import { UniversityImport } from "@/components/crm/UniversityImport";
+import { UniversityDetails } from "@/components/crm/UniversityDetails";
+import { ExternalLink } from "@/components/crm/ExternalLink";
+import {
+  BulkDeleteBar,
+  RowCheckbox,
+  SelectAllCheckbox,
+  useRowSelection,
+} from "@/components/crm/BulkSelection";
+import { UniversityExplorer } from "@/components/crm/UniversityExplorer";
+import {
+  CourseDialog,
+  MatchReason,
+  SearchExpansionPanel,
+  SearchTagManager,
+  type CourseDialogState,
+} from "@/components/crm/CourseSearch";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 
 import {
@@ -23,6 +42,7 @@ import {
   BarChart3,
   Bell,
   BookOpen,
+  Compass,
   BriefcaseBusiness,
   CalendarClock,
   Check,
@@ -42,6 +62,7 @@ import {
   Settings,
   SlidersHorizontal,
   Sparkles,
+  Tags,
   Users,
   X,
 } from "lucide-react";
@@ -54,9 +75,11 @@ import type {
   DocumentRecord,
   FollowUp,
   Payment,
+  SearchPage,
   ServiceType,
   Student,
   University,
+  UniversityCourse,
   VisaCase,
 } from "@/types/crm";
 import { Badge } from "@/components/ui/badge";
@@ -77,6 +100,7 @@ type ModuleKey =
   | "students"
   | "universities"
   | "courses"
+  | "explorer"
   | "applications"
   | "documents"
   | "visa"
@@ -93,6 +117,7 @@ const navigation: { label: string; to: string; key: ModuleKey; icon: IconCompone
   { label: "Students", to: "/students", key: "students", icon: Users },
   { label: "Universities", to: "/universities", key: "universities", icon: GraduationCap },
   { label: "Courses", to: "/courses", key: "courses", icon: BookOpen },
+  { label: "Explorer", to: "/explorer", key: "explorer", icon: Compass },
   { label: "Applications", to: "/applications", key: "applications", icon: ClipboardList },
   { label: "Documents", to: "/documents", key: "documents", icon: FileCheck2 },
   { label: "Visa cases", to: "/visa", key: "visa", icon: BriefcaseBusiness },
@@ -103,7 +128,8 @@ const navigation: { label: string; to: string; key: ModuleKey; icon: IconCompone
   { label: "Reports", to: "/reports", key: "reports", icon: BarChart3 },
 ];
 
-const compactNavigation = navigation.slice(0, 5);
+// Mobile bottom bar keeps its original five modules
+const compactNavigation = navigation.filter((item) => item.key !== "explorer").slice(0, 5);
 function statusTone(status: string) {
   if (["Approved", "Paid", "Completed", "Offer Received", "Ready", "Uploaded"].includes(status))
     return "bg-success/15 text-success-foreground border-success/25";
@@ -497,12 +523,14 @@ function TableToolbar({
   filter,
   setFilter,
   filterOptions,
+  placeholder = "Search records...",
 }: {
   search: string;
   setSearch: (value: string) => void;
   filter: string;
   setFilter: (value: string) => void;
   filterOptions: string[];
+  placeholder?: string;
 }) {
   return (
     <div className="mb-4 flex flex-col gap-3 sm:flex-row">
@@ -511,23 +539,25 @@ function TableToolbar({
         <Input
           value={search}
           onChange={(event) => setSearch(event.target.value)}
-          placeholder="Search records..."
+          placeholder={placeholder}
           className="pl-9 bg-background/60"
         />
       </div>
-      <div className="relative sm:w-48">
-        <SlidersHorizontal className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <select
-          value={filter}
-          onChange={(event) => setFilter(event.target.value)}
-          className="h-9 w-full appearance-none rounded-md border border-input bg-background/60 pl-9 pr-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-        >
-          <option value="All">All statuses</option>
-          {filterOptions.map((option) => (
-            <option key={option}>{option}</option>
-          ))}
-        </select>
-      </div>
+      {filterOptions.length > 0 && (
+        <div className="relative sm:w-48">
+          <SlidersHorizontal className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <select
+            value={filter}
+            onChange={(event) => setFilter(event.target.value)}
+            className="h-9 w-full appearance-none rounded-md border border-input bg-background/60 pl-9 pr-3 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+          >
+            <option value="All">All statuses</option>
+            {filterOptions.map((option) => (
+              <option key={option}>{option}</option>
+            ))}
+          </select>
+        </div>
+      )}
     </div>
   );
 }
@@ -588,6 +618,8 @@ function StudentsModule() {
       ),
     [students, search, filter],
   );
+  const studentSelection = useRowSelection(filtered.map((student) => student.id));
+
   const addStudent = async () => {
     if (!name.trim()) return;
 
@@ -688,11 +720,32 @@ function StudentsModule() {
           "Visa",
         ]}
       />
+      <BulkDeleteBar
+        selection={studentSelection}
+        noun="students"
+        singular="student"
+        names={(ids) =>
+          ids.map((id) => {
+            const student = students.find((item) => item.id === id);
+            return student ? `${student.name} (${student.id})` : id;
+          })
+        }
+        note="Applications, documents and other records of these students are not deleted."
+        onDelete={async (ids) => {
+          const result = await studentService.bulkDeleteStudents(ids);
+          const removed = new Set([...result.deletedIds, ...result.notFound]);
+          setStudents((current) => current.filter((student) => !removed.has(student.id)));
+          return result;
+        }}
+      />
       <Card className="overflow-hidden shadow-none">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[760px] text-left text-sm">
             <thead className="bg-secondary/60 text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
+                <th className="w-10 py-3 pl-5">
+                  <SelectAllCheckbox selection={studentSelection} label="students" />
+                </th>
                 <th className="px-5 py-3 font-medium">Student</th>
                 <th className="px-5 py-3 font-medium">Service</th>
                 <th className="px-5 py-3 font-medium">Journey stage</th>
@@ -704,6 +757,13 @@ function StudentsModule() {
             <tbody className="divide-y divide-line/60">
               {filtered.map((student) => (
                 <tr key={student.id} className="transition-colors hover:bg-accent/40">
+                  <td className="w-10 py-3 pl-5">
+                    <RowCheckbox
+                      selection={studentSelection}
+                      id={student.id}
+                      label={student.name}
+                    />
+                  </td>
                   <td className="px-5 py-3">
                     <button
                       className="flex items-center gap-3 text-left"
@@ -1258,8 +1318,483 @@ function PipelinesModule() {
   );
 }
 
+/* =========================================================
+   COURSES
+   Server-side ranked search (related search tags), filters
+   and pagination for the course catalogue and the imported
+   university programmes.
+========================================================= */
+
+const COURSE_PAGE_SIZE = 25;
+
+type CourseView = "catalogue" | "programmes";
+
+type CourseResults =
+  | { view: "catalogue"; result: SearchPage<Course> }
+  | { view: "programmes"; result: SearchPage<UniversityCourse> };
+
+function useDebouncedValue<T>(value: T, delay = 300) {
+  const [debounced, setDebounced] = useState(value);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+
+  return debounced;
+}
+
+const EDITABLE_COURSE_FIELDS = [
+  "name",
+  "degree",
+  "specialization",
+  "country",
+  "field",
+  "duration",
+  "language",
+  "status",
+  "requirements",
+  "notes",
+  "customSearchTags",
+] as const;
+
+const EDITABLE_PROGRAMME_FIELDS = [
+  "courseName",
+  "degree",
+  "specialization",
+  "subjectArea",
+  "language",
+  "duration",
+  "studyMode",
+  "intake",
+  "applicationDeadline",
+  "applicationMethod",
+  "ielts",
+  "tuitionMin",
+  "tuitionMax",
+  "tuitionCurrency",
+  "city",
+  "programmeUrl",
+  "eligibility",
+  "customSearchTags",
+] as const;
+
+function CoursesModule() {
+  // Courses created with or imported for universities are university programmes
+  const [view, setView] = useState<CourseView>("programmes");
+  const [totals, setTotals] = useState<Partial<Record<CourseView, number>>>({});
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("All");
+  const [page, setPage] = useState(1);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const [results, setResults] = useState<CourseResults | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [dialog, setDialog] = useState<CourseDialogState | null>(null);
+  const [managingTags, setManagingTags] = useState(false);
+  const [tagNames, setTagNames] = useState<Map<string, string>>(new Map());
+  const [universityOptions, setUniversityOptions] = useState<{ id: string; name: string }[]>([]);
+
+  const query = useDebouncedValue(search.trim());
+
+  useEffect(() => {
+    let cancelled = false;
+    const params = { q: query, status: filter, page, limit: COURSE_PAGE_SIZE };
+
+    setLoading(true);
+    setError(null);
+
+    const request: Promise<CourseResults> =
+      view === "catalogue"
+        ? courseService.searchCourses(params).then((result) => ({ view, result }))
+        : universityCourseService
+            .searchUniversityCourses(params)
+            .then((result) => ({ view: "programmes" as const, result }));
+
+    request
+      .then((next) => {
+        if (!cancelled) setResults(next);
+      })
+      .catch((loadError) => {
+        if (cancelled) return;
+        console.error("Failed to load courses:", loadError);
+        setError(loadError instanceof Error ? loadError.message : "Unable to load courses");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [view, query, filter, page, reloadKey]);
+
+  // Record count of each tab, so no stored course is hidden behind the other tab
+  useEffect(() => {
+    let cancelled = false;
+    const params = { q: "", status: "All", page: 1, limit: 1 };
+
+    Promise.all([
+      courseService.searchCourses(params),
+      universityCourseService.searchUniversityCourses(params),
+    ])
+      .then(([catalogue, programmes]) => {
+        if (!cancelled) setTotals({ catalogue: catalogue.total, programmes: programmes.total });
+      })
+      .catch((countError) => console.error("Failed to count courses:", countError));
+
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
+
+  const loadTagNames = async () => {
+    if (tagNames.size || apiConfig.useMockData) return;
+    try {
+      const tags = await searchTagService.getSearchTags();
+      setTagNames(new Map(tags.map((tag) => [tag.key, tag.name])));
+    } catch (tagError) {
+      console.error("Failed to load search tags:", tagError);
+    }
+  };
+
+  const openDialog = (state: CourseDialogState) => {
+    loadTagNames();
+    if (state.kind === "programme") loadUniversityOptions();
+    setDialog(state);
+  };
+
+  const changeSearch = (value: string) => {
+    setSearch(value);
+    setPage(1);
+  };
+
+  const changeView = (value: string) => {
+    setView(value as CourseView);
+    setFilter("All");
+    setPage(1);
+    setResults(null);
+  };
+
+  const saveCourse = async (course: Partial<Course>, isNew: boolean) => {
+    const payload: Partial<Course> = Object.fromEntries(
+      EDITABLE_COURSE_FIELDS.filter((field) => course[field] !== undefined).map((field) => [
+        field,
+        course[field],
+      ]),
+    );
+
+    if (isNew) await courseService.createCourse({ ...payload, id: `CRS-${Date.now()}` });
+    else if (course.id) await courseService.updateCourse(course.id, payload);
+
+    setReloadKey((key) => key + 1);
+  };
+
+  const saveProgramme = async (course: Partial<UniversityCourse>, isNew: boolean) => {
+    const payload: Partial<UniversityCourse> & { universityExternalId?: string } =
+      Object.fromEntries(
+        EDITABLE_PROGRAMME_FIELDS.filter((field) => course[field] !== undefined).map((field) => [
+          field,
+          typeof course[field] === "string" ? (course[field] as string).trim() : course[field],
+        ]),
+      );
+    // The server resolves the readable university id to the reference + name
+    if (course.universityId) payload.universityExternalId = course.universityId;
+
+    if (isNew) {
+      await universityCourseService.createUniversityCourse({ ...payload, id: `UC-${Date.now()}` });
+    } else if (course.id) {
+      await universityCourseService.updateUniversityCourse(course.id, payload);
+    }
+
+    setReloadKey((key) => key + 1);
+  };
+
+  const loadUniversityOptions = async () => {
+    if (universityOptions.length) return;
+    try {
+      const universities = await universityService.getUniversities();
+      setUniversityOptions(
+        universities
+          .map((university) => ({ id: university.id, name: university.name }))
+          .sort((a, b) => a.name.localeCompare(b.name)),
+      );
+    } catch (loadError) {
+      console.error("Failed to load universities:", loadError);
+    }
+  };
+
+  const result = results?.result;
+  const searchInfo = result?.search ?? null;
+
+  // Rows of the current tab and page; switching tab or page clears the selection
+  const pageRecords: { id: string; label: string }[] =
+    results?.view === "catalogue"
+      ? results.result.data.map((item) => ({ id: item.id, label: item.name }))
+      : results?.view === "programmes"
+        ? results.result.data.map((item) => ({
+            id: item.id,
+            label: [item.courseName, item.universityName].filter(Boolean).join(" · "),
+          }))
+        : [];
+  const courseSelection = useRowSelection(pageRecords.map((record) => record.id));
+  const total = result?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / COURSE_PAGE_SIZE));
+  const firstRow = total ? (page - 1) * COURSE_PAGE_SIZE + 1 : 0;
+  const lastRow = Math.min(page * COURSE_PAGE_SIZE, total);
+
+  const rows =
+    results?.view === "catalogue"
+      ? results.result.data.map((item) => (
+          <tr
+            key={item.id}
+            className="cursor-pointer hover:bg-accent/40"
+            onClick={() => openDialog({ kind: "course", course: item, isNew: false })}
+          >
+            <td className="w-10 py-3 pl-5">
+              <RowCheckbox selection={courseSelection} id={item.id} label={item.name} />
+            </td>
+            <td className="px-5 py-3">
+              <p className="font-medium">{item.name}</p>
+              <p className="text-xs text-muted-foreground">
+                {[item.degree, item.duration].filter(Boolean).join(" · ")}
+              </p>
+              {searchInfo && item.searchMatch && <MatchReason match={item.searchMatch} />}
+            </td>
+            <td className="px-5 py-3">{item.country}</td>
+            <td className="px-5 py-3 text-muted-foreground">{item.specialization}</td>
+            <td className="px-5 py-3 text-muted-foreground">{item.language}</td>
+            <td className="px-5 py-3">{item.status && <StatusBadge>{item.status}</StatusBadge>}</td>
+          </tr>
+        ))
+      : results?.view === "programmes"
+        ? results.result.data.map((item) => (
+            <tr
+              key={item.id}
+              className="cursor-pointer hover:bg-accent/40"
+              onClick={() => openDialog({ kind: "programme", course: item, isNew: false })}
+            >
+              <td className="w-10 py-3 pl-5">
+                <RowCheckbox selection={courseSelection} id={item.id} label={item.courseName} />
+              </td>
+              <td className="px-5 py-3">
+                <p className="flex items-center gap-1 font-medium">
+                  {item.courseName}
+                  <ExternalLink
+                    href={item.programmeUrl || item.sourceUrl}
+                    iconOnly
+                    label={`Open course page of ${item.courseName}`}
+                  />
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {[item.specialization, item.duration].filter(Boolean).join(" · ") || item.id}
+                </p>
+                {searchInfo && item.searchMatch && <MatchReason match={item.searchMatch} />}
+              </td>
+              <td className="px-5 py-3">{item.universityName || "Not linked"}</td>
+              <td className="px-5 py-3 text-muted-foreground">{item.degree || "—"}</td>
+              <td className="px-5 py-3 text-muted-foreground">{item.language || "—"}</td>
+              <td className="px-5 py-3 text-muted-foreground">{item.city || "—"}</td>
+            </tr>
+          ))
+        : [];
+
+  const headers =
+    view === "catalogue"
+      ? ["Course", "Country", "Specialization", "Language", "Status"]
+      : ["Programme", "University", "Degree", "Language", "City"];
+
+  return (
+    <div className="workspace-rise">
+      <PageHeader
+        title="Courses"
+        description="Manage the pathways your counsellors recommend."
+        action={view === "catalogue" ? "Add course" : "Add programme"}
+        onAction={() =>
+          view === "catalogue"
+            ? openDialog({
+                kind: "course",
+                course: { status: "Active", customSearchTags: [] },
+                isNew: true,
+              })
+            : openDialog({ kind: "programme", course: { customSearchTags: [] }, isNew: true })
+        }
+        extraActions={
+          apiConfig.useMockData ? undefined : (
+            <Button variant="outline" onClick={() => setManagingTags(true)}>
+              <Tags />
+              Search tags
+            </Button>
+          )
+        }
+      />
+
+      <Tabs value={view} onValueChange={changeView} className="mb-4">
+        <TabsList>
+          <TabsTrigger value="programmes">
+            University programmes
+            {totals.programmes !== undefined ? ` (${totals.programmes})` : ""}
+          </TabsTrigger>
+          <TabsTrigger value="catalogue">
+            Course catalogue
+            {totals.catalogue !== undefined ? ` (${totals.catalogue})` : ""}
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      <TableToolbar
+        search={search}
+        setSearch={changeSearch}
+        filter={filter}
+        setFilter={(value) => {
+          setFilter(value);
+          setPage(1);
+        }}
+        filterOptions={view === "catalogue" ? ["Active", "Draft"] : []}
+        placeholder={
+          view === "catalogue"
+            ? "Search courses, specializations or tags (e.g. AI)..."
+            : "Search programmes, universities or tags (e.g. AI)..."
+        }
+      />
+
+      {searchInfo && !error && (
+        <SearchExpansionPanel search={searchInfo} total={total} onSearch={changeSearch} />
+      )}
+
+      {!apiConfig.useMockData && (
+        <BulkDeleteBar
+          selection={courseSelection}
+          noun={view === "catalogue" ? "courses" : "programmes"}
+          singular={view === "catalogue" ? "course" : "programme"}
+          names={(ids) =>
+            ids.map((id) => pageRecords.find((record) => record.id === id)?.label ?? id)
+          }
+          note={
+            view === "programmes"
+              ? "Only the programmes are deleted; their universities stay."
+              : "University programmes are separate records and are not deleted."
+          }
+          onDelete={async (ids) => {
+            const deleted =
+              view === "catalogue"
+                ? await courseService.bulkDeleteCourses(ids)
+                : await universityCourseService.bulkDeleteUniversityCourses(ids);
+            setReloadKey((key) => key + 1);
+            return deleted;
+          }}
+        />
+      )}
+
+      <Card className="overflow-hidden shadow-none">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[700px] text-left text-sm">
+            <thead className="bg-secondary/60 text-xs uppercase tracking-wide text-muted-foreground">
+              <tr>
+                <th className="w-10 py-3 pl-5">
+                  <SelectAllCheckbox
+                    selection={courseSelection}
+                    label={view === "catalogue" ? "courses" : "programmes"}
+                  />
+                </th>
+                {headers.map((header) => (
+                  <th key={header} className="px-5 py-3 font-medium">
+                    {header}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className={`divide-y divide-line/60 ${loading ? "opacity-60" : ""}`}>
+              {rows}
+            </tbody>
+          </table>
+          {error ? (
+            <ErrorState message={error} onRetry={() => setReloadKey((key) => key + 1)} />
+          ) : loading && !rows.length ? (
+            <LoadingState />
+          ) : (
+            !loading &&
+            rows.length === 0 &&
+            (query || filter !== "All" ? (
+              <EmptyState
+                title="No matching records"
+                description="Try changing the search or status filter."
+              />
+            ) : (
+              <EmptyState
+                title={
+                  view === "catalogue" ? "No catalogue courses yet" : "No university programmes yet"
+                }
+                description={
+                  view === "catalogue" && totals.programmes
+                    ? `The catalogue is empty, but ${totals.programmes} course(s) linked to universities are under "University programmes".`
+                    : view === "programmes" && totals.catalogue
+                      ? `No programmes yet; ${totals.catalogue} course(s) are in the course catalogue.`
+                      : view === "programmes"
+                        ? "Add a programme, or import a course sheet from Universities → Upload Excel."
+                        : "Add a course to start the catalogue."
+                }
+              />
+            ))
+          )}
+        </div>
+        {total > COURSE_PAGE_SIZE && (
+          <div className="flex flex-col items-center justify-between gap-2 border-t border-line/60 px-5 py-3 text-xs text-muted-foreground sm:flex-row">
+            <span>
+              Showing {firstRow}–{lastRow} of {total}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page <= 1 || loading}
+                onClick={() => setPage(page - 1)}
+              >
+                Previous
+              </Button>
+              <span>
+                Page {page} of {pageCount}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page >= pageCount || loading}
+                onClick={() => setPage(page + 1)}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        )}
+      </Card>
+
+      <CourseDialog
+        state={dialog}
+        tagNames={tagNames}
+        onClose={() => setDialog(null)}
+        onSaveCourse={saveCourse}
+        universities={universityOptions}
+        onSaveProgramme={saveProgramme}
+      />
+
+      {!apiConfig.useMockData && (
+        <SearchTagManager
+          open={managingTags}
+          onOpenChange={setManagingTags}
+          scope={view === "catalogue" ? "courses" : "university-courses"}
+          onChanged={() => {
+            setTagNames(new Map());
+            setReloadKey((key) => key + 1);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
 type RecordLists = {
-  courses: Course[];
   applications: Application[];
   documents: DocumentRecord[];
   visa: VisaCase[];
@@ -1269,20 +1804,12 @@ type RecordLists = {
 
 type RecordKey = keyof RecordLists;
 
-const RECORD_KEYS: RecordKey[] = [
-  "courses",
-  "applications",
-  "documents",
-  "visa",
-  "payments",
-  "follow-ups",
-];
+const RECORD_KEYS: RecordKey[] = ["applications", "documents", "visa", "payments", "follow-ups"];
 
 const isRecordKey = (module: string): module is RecordKey =>
   RECORD_KEYS.some((key) => key === module);
 
 const emptyRecords: RecordLists = {
-  courses: [],
   applications: [],
   documents: [],
   visa: [],
@@ -1293,7 +1820,10 @@ const emptyRecords: RecordLists = {
 function RecordsModule({
   module,
 }: {
-  module: Exclude<ModuleKey, "dashboard" | "students" | "pipelines" | "settings">;
+  module: Exclude<
+    ModuleKey,
+    "dashboard" | "students" | "courses" | "explorer" | "pipelines" | "settings"
+  >;
 }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("All");
@@ -1316,11 +1846,6 @@ function RecordsModule({
 
     try {
       switch (key) {
-        case "courses": {
-          const data = await courseService.getCourses();
-          setRecords((current) => ({ ...current, courses: data }));
-          break;
-        }
         case "applications": {
           const data = await applicationService.getApplications();
           setRecords((current) => ({ ...current, applications: data }));
@@ -1469,12 +1994,6 @@ function RecordsModule({
       action: "Add university",
       filters: [...new Set(universities.map((item) => item.country))],
     },
-    courses: {
-      title: "Courses",
-      description: "Manage the pathways your counsellors recommend.",
-      action: "Add course",
-      filters: ["Active", "Draft"],
-    },
     applications: {
       title: "Applications",
       description: "Track submissions, deadlines, offers, and next actions.",
@@ -1557,135 +2076,185 @@ function RecordsModule({
   }, [module]);
 
   const query = search.toLowerCase();
+
+  // Before the early returns below: hooks must run on every render
+  const visibleUniversities =
+    module === "universities"
+      ? universities.filter(
+          (item) =>
+            `${item.name} ${item.country} ${item.city}`.toLowerCase().includes(query) &&
+            (filter === "All" || item.country === filter),
+        )
+      : [];
+  const universitySelection = useRowSelection(visibleUniversities.map((item) => item.id));
+
   if (module === "assessment") return <AssessmentModule />;
   if (module === "reports") return <ReportsModule />;
   const rows =
     module === "universities"
-      ? universities
-          .filter(
-            (item) =>
-              `${item.name} ${item.country} ${item.city}`.toLowerCase().includes(query) &&
-              (filter === "All" || item.country === filter),
-          )
-          .map((item) => (
-            <tr key={item.id} className="hover:bg-accent/40">
-              <td className="px-5 py-3">
-                <p className="font-medium">{item.name}</p>
+      ? visibleUniversities.map((item) => (
+          <tr key={item.id} className="hover:bg-accent/40">
+            <td className="w-10 py-3 pl-5">
+              <RowCheckbox selection={universitySelection} id={item.id} label={item.name} />
+            </td>
+            <td className="px-5 py-3">
+              <p className="font-medium">{item.name}</p>
+
+              <p className="text-xs text-muted-foreground">
+                {item.id} · {item.city}
+              </p>
+            </td>
+
+            <td className="px-5 py-3 text-muted-foreground">{item.country}</td>
+
+            <td className="px-5 py-3">
+              <div>
+                {/* Course records first; the university's own "popular courses" list otherwise */}
+                <p className="font-medium">
+                  {item.courseNames?.length
+                    ? item.courseNames.join(", ") +
+                      ((item.courseCount ?? 0) > item.courseNames.length
+                        ? ` and ${(item.courseCount ?? 0) - item.courseNames.length} more`
+                        : "")
+                    : item.popularCourses?.length
+                      ? item.popularCourses.join(", ")
+                      : "No courses"}
+                </p>
+                {(item.courseCount ?? 0) > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {item.courseCount} course{item.courseCount === 1 ? "" : "s"} in the database
+                  </p>
+                )}
 
                 <p className="text-xs text-muted-foreground">
-                  {item.id} · {item.city}
+                  <ExternalLink
+                    href={item.website}
+                    label={`Open ${item.name} website`}
+                    fallback={item.website || "Website not available"}
+                  >
+                    {item.website}
+                  </ExternalLink>
                 </p>
-              </td>
+              </div>
+            </td>
 
-              <td className="px-5 py-3 text-muted-foreground">{item.country}</td>
+            <td className="px-5 py-3 text-muted-foreground">{item.ranking || "Not ranked"}</td>
 
-              <td className="px-5 py-3">
-                <div>
-                  <p className="font-medium">
-                    {item.popularCourses?.length ? item.popularCourses.join(", ") : "No courses"}
-                  </p>
+            <td className="px-5 py-3">
+              <StatusBadge>{item.difficulty || "Not specified"}</StatusBadge>
+            </td>
 
-                  <p className="text-xs text-muted-foreground">
-                    {item.website || "Website not available"}
-                  </p>
-                </div>
-              </td>
-
-              <td className="px-5 py-3 text-muted-foreground">{item.ranking || "Not ranked"}</td>
-
-              <td className="px-5 py-3">
-                <StatusBadge>{item.difficulty || "Not specified"}</StatusBadge>
-              </td>
-
-              <td className="px-5 py-3 text-right">
-                <Button variant="ghost" size="sm" onClick={() => openUniversity(item)}>
-                  View <ChevronRight />
-                </Button>
-              </td>
-            </tr>
-          ))
-      : module === "courses"
-        ? records.courses
+            <td className="px-5 py-3 text-right">
+              <Button variant="ghost" size="sm" onClick={() => openUniversity(item)}>
+                View <ChevronRight />
+              </Button>
+            </td>
+          </tr>
+        ))
+      : module === "applications"
+        ? records.applications
             .filter(
               (item) =>
-                `${item.name} ${item.country} ${item.specialization}`
-                  .toLowerCase()
-                  .includes(query) &&
+                `${item.student} ${item.university} ${item.course}`.toLowerCase().includes(query) &&
                 (filter === "All" || item.status === filter),
             )
             .map((item) => (
               <tr key={item.id} className="hover:bg-accent/40">
                 <td className="px-5 py-3">
-                  <p className="font-medium">{item.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {item.degree} · {item.duration}
-                  </p>
+                  <p className="font-medium">{item.student}</p>
+                  <p className="text-xs text-muted-foreground">{item.university}</p>
                 </td>
-                <td className="px-5 py-3">{item.country}</td>
-                <td className="px-5 py-3 text-muted-foreground">{item.specialization}</td>
-                <td className="px-5 py-3 text-muted-foreground">{item.language}</td>
+                <td className="px-5 py-3">{item.course}</td>
                 <td className="px-5 py-3">
                   <StatusBadge>{item.status}</StatusBadge>
                 </td>
+                <td className="px-5 py-3 text-muted-foreground">{item.deadline}</td>
+                <td className="px-5 py-3 text-muted-foreground">{item.counsellor}</td>
               </tr>
             ))
-        : module === "applications"
-          ? records.applications
+        : module === "documents"
+          ? records.documents
               .filter(
                 (item) =>
-                  `${item.student} ${item.university} ${item.course}`
-                    .toLowerCase()
-                    .includes(query) &&
+                  `${item.student} ${item.type}`.toLowerCase().includes(query) &&
                   (filter === "All" || item.status === filter),
               )
               .map((item) => (
                 <tr key={item.id} className="hover:bg-accent/40">
                   <td className="px-5 py-3">
-                    <p className="font-medium">{item.student}</p>
-                    <p className="text-xs text-muted-foreground">{item.university}</p>
+                    <p className="font-medium">{item.type}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {item.student} · {item.id}
+                    </p>
                   </td>
-                  <td className="px-5 py-3">{item.course}</td>
                   <td className="px-5 py-3">
                     <StatusBadge>{item.status}</StatusBadge>
                   </td>
-                  <td className="px-5 py-3 text-muted-foreground">{item.deadline}</td>
-                  <td className="px-5 py-3 text-muted-foreground">{item.counsellor}</td>
+                  <td className="px-5 py-3 text-muted-foreground">
+                    {item.uploadedDate || "Not uploaded"}
+                  </td>
+                  <td className="px-5 py-3 text-muted-foreground">{item.verifiedBy || "—"}</td>
+                  <td className="px-5 py-3">
+                    <Button variant="outline" size="sm">
+                      Review
+                    </Button>
+                  </td>
                 </tr>
               ))
-          : module === "documents"
-            ? records.documents
+          : module === "visa"
+            ? records.visa
                 .filter(
                   (item) =>
-                    `${item.student} ${item.type}`.toLowerCase().includes(query) &&
+                    `${item.student} ${item.country} ${item.university}`
+                      .toLowerCase()
+                      .includes(query) &&
                     (filter === "All" || item.status === filter),
                 )
                 .map((item) => (
                   <tr key={item.id} className="hover:bg-accent/40">
                     <td className="px-5 py-3">
-                      <p className="font-medium">{item.type}</p>
+                      <p className="font-medium">{item.student}</p>
                       <p className="text-xs text-muted-foreground">
-                        {item.student} · {item.id}
+                        {item.country} · {item.visaType}
                       </p>
                     </td>
+                    <td className="px-5 py-3">{item.university}</td>
                     <td className="px-5 py-3">
                       <StatusBadge>{item.status}</StatusBadge>
                     </td>
                     <td className="px-5 py-3 text-muted-foreground">
-                      {item.uploadedDate || "Not uploaded"}
+                      {item.appointmentDate || "Not scheduled"}
                     </td>
-                    <td className="px-5 py-3 text-muted-foreground">{item.verifiedBy || "—"}</td>
-                    <td className="px-5 py-3">
-                      <Button variant="outline" size="sm">
-                        Review
-                      </Button>
-                    </td>
+                    <td className="px-5 py-3 text-muted-foreground">{item.documentStatus}</td>
                   </tr>
                 ))
-            : module === "visa"
-              ? records.visa
+            : module === "payments"
+              ? records.payments
                   .filter(
                     (item) =>
-                      `${item.student} ${item.country} ${item.university}`
+                      `${item.student} ${item.paymentType}`.toLowerCase().includes(query) &&
+                      (filter === "All" || item.status === filter),
+                  )
+                  .map((item) => (
+                    <tr key={item.id} className="hover:bg-accent/40">
+                      <td className="px-5 py-3">
+                        <p className="font-medium">{item.student}</p>
+                        <p className="text-xs text-muted-foreground">{item.paymentType}</p>
+                      </td>
+                      <td className="px-5 py-3 font-medium">
+                        {formatAmount(item.amount, item.currency)}
+                      </td>
+                      <td className="px-5 py-3">{formatAmount(item.paidAmount, item.currency)}</td>
+                      <td className="px-5 py-3">
+                        <StatusBadge>{item.status}</StatusBadge>
+                      </td>
+                      <td className="px-5 py-3 text-muted-foreground">{item.dueDate}</td>
+                    </tr>
+                  ))
+              : records["follow-ups"]
+                  .filter(
+                    (item) =>
+                      `${item.student} ${item.type} ${item.counsellor}`
                         .toLowerCase()
                         .includes(query) &&
                       (filter === "All" || item.status === filter),
@@ -1695,84 +2264,31 @@ function RecordsModule({
                       <td className="px-5 py-3">
                         <p className="font-medium">{item.student}</p>
                         <p className="text-xs text-muted-foreground">
-                          {item.country} · {item.visaType}
+                          {item.type} · {item.counsellor}
                         </p>
                       </td>
-                      <td className="px-5 py-3">{item.university}</td>
+                      <td className="px-5 py-3">{item.date}</td>
+                      <td className="px-5 py-3">{item.time}</td>
                       <td className="px-5 py-3">
                         <StatusBadge>{item.status}</StatusBadge>
                       </td>
-                      <td className="px-5 py-3 text-muted-foreground">
-                        {item.appointmentDate || "Not scheduled"}
+                      <td className="px-5 py-3">
+                        <StatusBadge>{item.priority}</StatusBadge>
                       </td>
-                      <td className="px-5 py-3 text-muted-foreground">{item.documentStatus}</td>
                     </tr>
-                  ))
-              : module === "payments"
-                ? records.payments
-                    .filter(
-                      (item) =>
-                        `${item.student} ${item.paymentType}`.toLowerCase().includes(query) &&
-                        (filter === "All" || item.status === filter),
-                    )
-                    .map((item) => (
-                      <tr key={item.id} className="hover:bg-accent/40">
-                        <td className="px-5 py-3">
-                          <p className="font-medium">{item.student}</p>
-                          <p className="text-xs text-muted-foreground">{item.paymentType}</p>
-                        </td>
-                        <td className="px-5 py-3 font-medium">
-                          {formatAmount(item.amount, item.currency)}
-                        </td>
-                        <td className="px-5 py-3">
-                          {formatAmount(item.paidAmount, item.currency)}
-                        </td>
-                        <td className="px-5 py-3">
-                          <StatusBadge>{item.status}</StatusBadge>
-                        </td>
-                        <td className="px-5 py-3 text-muted-foreground">{item.dueDate}</td>
-                      </tr>
-                    ))
-                : records["follow-ups"]
-                    .filter(
-                      (item) =>
-                        `${item.student} ${item.type} ${item.counsellor}`
-                          .toLowerCase()
-                          .includes(query) &&
-                        (filter === "All" || item.status === filter),
-                    )
-                    .map((item) => (
-                      <tr key={item.id} className="hover:bg-accent/40">
-                        <td className="px-5 py-3">
-                          <p className="font-medium">{item.student}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {item.type} · {item.counsellor}
-                          </p>
-                        </td>
-                        <td className="px-5 py-3">{item.date}</td>
-                        <td className="px-5 py-3">{item.time}</td>
-                        <td className="px-5 py-3">
-                          <StatusBadge>{item.status}</StatusBadge>
-                        </td>
-                        <td className="px-5 py-3">
-                          <StatusBadge>{item.priority}</StatusBadge>
-                        </td>
-                      </tr>
-                    ));
+                  ));
   const headers =
     module === "universities"
       ? ["University", "Country", "Courses", "Ranking", "Difficulty", "Action"]
-      : module === "courses"
-        ? ["Course", "Country", "Specialization", "Language", "Status"]
-        : module === "applications"
-          ? ["Student", "Course", "Status", "Deadline", "Counsellor"]
-          : module === "documents"
-            ? ["Document", "Status", "Uploaded", "Verified by", "Action"]
-            : module === "visa"
-              ? ["Student", "University", "Status", "Appointment", "Documents"]
-              : module === "payments"
-                ? ["Student", "Amount", "Paid", "Status", "Due date"]
-                : ["Student", "Date", "Time", "Status", "Priority"];
+      : module === "applications"
+        ? ["Student", "Course", "Status", "Deadline", "Counsellor"]
+        : module === "documents"
+          ? ["Document", "Status", "Uploaded", "Verified by", "Action"]
+          : module === "visa"
+            ? ["Student", "University", "Status", "Appointment", "Documents"]
+            : module === "payments"
+              ? ["Student", "Amount", "Paid", "Status", "Due date"]
+              : ["Student", "Date", "Time", "Status", "Priority"];
   return (
     <div className="workspace-rise">
       <PageHeader
@@ -1791,11 +2307,36 @@ function RecordsModule({
         setFilter={setFilter}
         filterOptions={config.filters}
       />
+      {module === "universities" && (
+        <BulkDeleteBar
+          selection={universitySelection}
+          noun="universities"
+          singular="university"
+          names={(ids) =>
+            ids.map((id) => {
+              const university = universities.find((item) => item.id === id);
+              return university ? `${university.name} (${university.id})` : id;
+            })
+          }
+          note="Courses and programmes linked to these universities are not deleted."
+          onDelete={async (ids) => {
+            const result = await universityService.bulkDeleteUniversities(ids);
+            const removed = new Set([...result.deletedIds, ...result.notFound]);
+            setUniversities((current) => current.filter((item) => !removed.has(item.id)));
+            return result;
+          }}
+        />
+      )}
       <Card className="overflow-hidden shadow-none">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[700px] text-left text-sm">
             <thead className="bg-secondary/60 text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
+                {module === "universities" && (
+                  <th className="w-10 py-3 pl-5">
+                    <SelectAllCheckbox selection={universitySelection} label="universities" />
+                  </th>
+                )}
                 {headers.map((header) => (
                   <th key={header} className="px-5 py-3 font-medium">
                     {header}
@@ -2092,7 +2633,7 @@ function RecordsModule({
           }
         }}
       >
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+        <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-4xl">
           {selectedUniversity && (
             <>
               <DialogHeader>
@@ -2103,109 +2644,7 @@ function RecordsModule({
                 </DialogDescription>
               </DialogHeader>
 
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-md border border-line/60 bg-secondary/40 p-3">
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                    Country
-                  </p>
-
-                  <p className="mt-1 text-sm font-medium">{selectedUniversity.country || "—"}</p>
-                </div>
-
-                <div className="rounded-md border border-line/60 bg-secondary/40 p-3">
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">City</p>
-
-                  <p className="mt-1 text-sm font-medium">{selectedUniversity.city || "—"}</p>
-                </div>
-
-                <div className="rounded-md border border-line/60 bg-secondary/40 p-3">
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                    Ranking
-                  </p>
-
-                  <p className="mt-1 text-sm font-medium">
-                    {selectedUniversity.ranking || "Not ranked"}
-                  </p>
-                </div>
-
-                <div className="rounded-md border border-line/60 bg-secondary/40 p-3">
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                    Difficulty
-                  </p>
-
-                  <p className="mt-1 text-sm font-medium">{selectedUniversity.difficulty || "—"}</p>
-                </div>
-
-                <div className="rounded-md border border-line/60 bg-secondary/40 p-3">
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                    English Requirement
-                  </p>
-
-                  <p className="mt-1 text-sm font-medium">
-                    {selectedUniversity.englishRequirement || "—"}
-                  </p>
-                </div>
-
-                <div className="rounded-md border border-line/60 bg-secondary/40 p-3">
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                    Indian Percentage
-                  </p>
-
-                  <p className="mt-1 text-sm font-medium">
-                    {selectedUniversity.recommendedIndianPercentage || "—"}
-                  </p>
-                </div>
-
-                <div className="rounded-md border border-line/60 bg-secondary/40 p-3">
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                    Application Opens
-                  </p>
-
-                  <p className="mt-1 text-sm font-medium">
-                    {selectedUniversity.applicationOpens || "—"}
-                  </p>
-                </div>
-
-                <div className="rounded-md border border-line/60 bg-secondary/40 p-3">
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                    Application Deadline
-                  </p>
-
-                  <p className="mt-1 text-sm font-medium">
-                    {selectedUniversity.applicationDeadline || "—"}
-                  </p>
-                </div>
-
-                <div className="rounded-md border border-line/60 bg-secondary/40 p-3 sm:col-span-2">
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                    Popular Courses
-                  </p>
-
-                  <p className="mt-1 text-sm font-medium">
-                    {selectedUniversity.popularCourses?.join(", ") || "No courses available"}
-                  </p>
-                </div>
-
-                <div className="rounded-md border border-line/60 bg-secondary/40 p-3 sm:col-span-2">
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                    Requirements
-                  </p>
-
-                  <p className="mt-1 text-sm font-medium">
-                    {selectedUniversity.requirements?.join(", ") || "No requirements available"}
-                  </p>
-                </div>
-
-                <div className="rounded-md border border-line/60 bg-secondary/40 p-3 sm:col-span-2">
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                    Website
-                  </p>
-
-                  <p className="mt-1 text-sm font-medium break-all">
-                    {selectedUniversity.website || "Not available"}
-                  </p>
-                </div>
-              </div>
+              <UniversityDetails university={selectedUniversity} />
 
               <DialogFooter>
                 <Button variant="destructive" onClick={() => deleteUniversity(selectedUniversity)}>
@@ -2867,6 +3306,7 @@ export function CrmWorkspace({ module }: { module: ModuleKey }) {
     if (next === "students") return navigate({ to: "/students" });
     if (next === "universities") return navigate({ to: "/universities" });
     if (next === "courses") return navigate({ to: "/courses" });
+    if (next === "explorer") return navigate({ to: "/explorer" });
     if (next === "applications") return navigate({ to: "/applications" });
     if (next === "documents") return navigate({ to: "/documents" });
     if (next === "visa") return navigate({ to: "/visa" });
@@ -2977,6 +3417,10 @@ export function CrmWorkspace({ module }: { module: ModuleKey }) {
             <Dashboard onNavigate={navigateToModule} />
           ) : module === "students" ? (
             <StudentsModule />
+          ) : module === "courses" ? (
+            <CoursesModule />
+          ) : module === "explorer" ? (
+            <UniversityExplorer />
           ) : module === "pipelines" ? (
             <PipelinesModule />
           ) : module === "settings" ? (
