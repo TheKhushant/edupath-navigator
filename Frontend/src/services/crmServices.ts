@@ -16,6 +16,7 @@ import {
   mockUniversityCourses,
 } from "@/data/mockData";
 import type {
+  ExcelCustomFieldDefinition,
   ExcelImportProgress,
   ExcelImportOptions,
   ExcelImportPreview,
@@ -52,7 +53,43 @@ const wait = async <T>(value: T): Promise<T> => {
   await new Promise((resolve) => setTimeout(resolve, 120));
   return clone(value);
 };
+/* =========================================================
+   BULK DELETE (POST /<resource>/bulk-delete, at most 500 ids per call)
+========================================================= */
+
+export interface BulkDeleteResult {
+  deleted: number;
+  deletedIds: string[];
+  /** Ids that matched no record (e.g. already deleted). */
+  notFound: string[];
+}
+
+const BULK_DELETE_BATCH = 500;
+
+async function bulkDelete(resource: string, ids: string[]): Promise<BulkDeleteResult> {
+  if (apiConfig.useMockData) return wait({ deleted: ids.length, deletedIds: ids, notFound: [] });
+
+  const total: BulkDeleteResult = { deleted: 0, deletedIds: [], notFound: [] };
+
+  for (let start = 0; start < ids.length; start += BULK_DELETE_BATCH) {
+    const response = await apiRequest<{ success: boolean; data: BulkDeleteResult }>(
+      `/${resource}/bulk-delete`,
+      {
+        method: "POST",
+        body: JSON.stringify({ ids: ids.slice(start, start + BULK_DELETE_BATCH) }),
+      },
+    );
+    total.deleted += response.data.deleted;
+    total.deletedIds.push(...response.data.deletedIds);
+    total.notFound.push(...response.data.notFound);
+  }
+
+  return total;
+}
+
 export const universityService = {
+  bulkDeleteUniversities: (ids: string[]) => bulkDelete("universities", ids),
+
   getUniversities: async (): Promise<University[]> => {
     if (apiConfig.useMockData) {
       return wait(mockUniversities);
@@ -236,6 +273,15 @@ export const universityImportService = {
     return response.data;
   },
 
+  /** Saved custom field definitions (labels and types for customFields values). */
+  getCustomFields: async (): Promise<ExcelCustomFieldDefinition[]> => {
+    requireBackend();
+    const response = await apiRequest<{ success: boolean; data: ExcelCustomFieldDefinition[] }>(
+      "/universities/import/custom-fields",
+    );
+    return response.data;
+  },
+
   /** Server-side progress of a running preview/import, or null when unknown. */
   getProgress: async (progressId: string): Promise<ExcelImportProgress | null> => {
     // Plain fetch: "not started yet" (404) is expected and is not logged as an API error
@@ -303,6 +349,8 @@ export const countryService = {
 };
 
 export const studentService = {
+  bulkDeleteStudents: (ids: string[]) => bulkDelete("students", ids),
+
   getStudents: async (): Promise<Student[]> => {
     if (apiConfig.useMockData) {
       return wait(mockStudents);
@@ -781,6 +829,8 @@ export const notificationService = {
 };
 
 export const courseService = {
+  bulkDeleteCourses: (ids: string[]) => bulkDelete("courses", ids),
+
   getCourses: async (): Promise<Course[]> => {
     if (apiConfig.useMockData) return wait(mockCourses);
 
@@ -831,6 +881,8 @@ export const courseService = {
 };
 
 export const universityCourseService = {
+  bulkDeleteUniversityCourses: (ids: string[]) => bulkDelete("university-courses", ids),
+
   getUniversityCourses: async (): Promise<UniversityCourse[]> => {
     if (apiConfig.useMockData) return wait(mockUniversityCourses);
 
@@ -995,11 +1047,15 @@ export const explorerService = {
     return (await apiRequest<ItemResponse<ExplorerFacets>>("/explorer/facets")).data;
   },
 
-  getUniversity: async (id: string): Promise<ExplorerUniversity> => {
+  /** includeSource: also the uploaded Excel rows / extra columns (Universities "View"). */
+  getUniversity: async (
+    id: string,
+    options: { includeSource?: boolean } = {},
+  ): Promise<ExplorerUniversity> => {
     requireApi();
     return (
       await apiRequest<ItemResponse<ExplorerUniversity>>(
-        `/explorer/universities/${encodeURIComponent(id)}`,
+        `/explorer/universities/${encodeURIComponent(id)}${options.includeSource ? "?include=source" : ""}`,
       )
     ).data;
   },

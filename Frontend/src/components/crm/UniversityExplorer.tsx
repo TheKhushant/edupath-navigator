@@ -20,7 +20,7 @@ import {
   X,
 } from "lucide-react";
 
-import { explorerService } from "@/services/crmServices";
+import { explorerService, universityImportService } from "@/services/crmServices";
 import {
   EXPLORER_FILTER_KEYS,
   explorerApiQuery,
@@ -37,6 +37,7 @@ import {
   type ShortlistKind,
 } from "@/hooks/useShortlist";
 import type {
+  ExcelCustomFieldDefinition,
   ExplorerCourse,
   ExplorerFacets,
   ExplorerItems,
@@ -48,6 +49,7 @@ import { MatchReason, SearchExpansionPanel } from "@/components/crm/CourseSearch
 import {
   countryFacts,
   courseFacts,
+  customFieldFacts,
   courseLocation,
   courseTuition,
   courseUniversity,
@@ -600,6 +602,15 @@ function DetailSheet({
   const [data, setData] = useState<ExplorerUniversity | ExplorerCourse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Labels of fields added by Excel imports; without them keys are shown readable
+  const [customFields, setCustomFields] = useState<ExcelCustomFieldDefinition[]>([]);
+  useEffect(() => {
+    universityImportService
+      .getCustomFields()
+      .then(setCustomFields)
+      .catch(() => setCustomFields([]));
+  }, []);
+
   useEffect(() => {
     if (!detail) return;
     let cancelled = false;
@@ -700,6 +711,14 @@ function DetailSheet({
                     ...listFilled(university.requirements),
                     ...listFilled(university.documents),
                   ]}
+                />
+              </Section>
+            )}
+
+            {customFieldFacts(university.customFields, customFields, "university").length > 0 && (
+              <Section title="Additional fields">
+                <FactList
+                  items={customFieldFacts(university.customFields, customFields, "university")}
                 />
               </Section>
             )}
@@ -806,6 +825,18 @@ function DetailSheet({
                   <p className="text-sm leading-relaxed">{course.eligibility}</p>
                 )}
                 <BulletList items={listFilled(course.requirements)} />
+              </Section>
+            )}
+
+            {listFilled(course.majorCourses).length > 0 && (
+              <Section title="Major courses">
+                <Chips values={listFilled(course.majorCourses)} limit={30} />
+              </Section>
+            )}
+
+            {customFieldFacts(course.customFields, customFields, "course").length > 0 && (
+              <Section title="Additional fields">
+                <FactList items={customFieldFacts(course.customFields, customFields, "course")} />
               </Section>
             )}
 

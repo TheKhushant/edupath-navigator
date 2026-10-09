@@ -150,6 +150,10 @@ export interface University {
   id: string;
   name: string;
   country: string;
+  /** Courses stored for this university (UniversityCourse records), from GET /universities. */
+  courseCount?: number;
+  /** First course names (up to 10) of those records. */
+  courseNames?: string[];
   city: string;
   state?: string;
 
@@ -926,6 +930,8 @@ export interface ExcelImportResult {
     rowsScanned: number;
     imported: number;
     updated: number;
+    /** Existing universities that received courses from the file. */
+    universitiesLinked?: number;
     coursesImported?: number;
     coursesUpdated?: number;
     /** Valid rows written (created or updated). */
@@ -1052,6 +1058,25 @@ export interface ExplorerCourse {
   lastVerified?: string;
   notes?: string;
 
+  // Programme details from the University Excel import
+  annualTuitionFee?: string;
+  category?: string;
+  germanRequirement?: string;
+  ectsRequired?: string;
+  workExperience?: string;
+  backlogsAllowed?: string;
+  apsRequired?: string;
+  gapAllowed?: string;
+  recommendedIndianPercentage?: string;
+  majorCourses?: string[];
+  difficulty?: UniversityDifficulty;
+  /** Fields added by users during an Excel import (see ExcelCustomFieldDefinition). */
+  customFields?: Record<string, unknown>;
+  /** Uploaded Excel row (header -> value); only with ?include=source. */
+  sourceRow?: Record<string, unknown>;
+  /** Uploaded columns kept as additional info; only with ?include=source. */
+  extraFields?: Record<string, unknown>;
+
   searchMatch?: SearchMatch;
   countryInfo?: ExplorerCountryInfo | null;
 }
@@ -1098,7 +1123,16 @@ export interface ExplorerUniversity {
   lastVerified?: string;
   sourceUrl?: string;
 
+  difficulty?: UniversityDifficulty;
+  /** Admission difficulty per field of study (University Excel import). */
+  admissionDifficulty?: { field: string; level?: string }[];
+
   programmeCount: number;
+  /** Fields added by users during an Excel import. */
+  customFields?: Record<string, unknown>;
+  /** Uploaded Excel row / extra columns; only with ?include=source. */
+  sourceRow?: Record<string, unknown>;
+  extraFields?: Record<string, unknown>;
   searchMatch?: SearchMatch;
   programmes?: ExplorerCourse[];
   countryInfo?: ExplorerCountryInfo | null;

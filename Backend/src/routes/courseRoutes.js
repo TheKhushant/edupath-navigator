@@ -1,4 +1,6 @@
 const express = require("express");
+const Course = require("../models/Course");
+const { bulkDeleteHandler } = require("../utils/bulkDelete");
 
 const {
   getCourses,
@@ -13,6 +15,7 @@ const router = express.Router();
 router.get("/", getCourses);
 router.get("/:id", getCourseById);
 router.post("/", createCourse);
+router.post("/bulk-delete", bulkDeleteHandler(Course, "courses"));
 router.patch("/:id", updateCourse);
 router.delete("/:id", deleteCourse);
 

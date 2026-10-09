@@ -1302,6 +1302,14 @@ export function UniversityImport({ onImported }: { onImported: () => void }) {
                 {result.transactional ? " in a single transaction" : ""}.
               </div>
 
+              {(result.courses?.length ?? 0) > 0 && (
+                <p className="text-sm text-muted-foreground">
+                  Every course row creates a course. A university is created only when it does not
+                  exist yet; otherwise the course is linked to the existing university. Imported
+                  courses are listed in the Explorer (Courses) and under Courses → Programmes.
+                </p>
+              )}
+
               <div className="grid gap-2 sm:grid-cols-3 lg:grid-cols-5">
                 <Stat label="Sheets scanned" value={result.summary.sheetsScanned} />
                 <Stat label="Rows scanned" value={result.summary.rowsScanned} />
@@ -1318,6 +1326,12 @@ export function UniversityImport({ onImported }: { onImported: () => void }) {
                   tone="text-success"
                 />
                 <Stat label="Universities updated" value={result.summary.updated} />
+                {(result.summary.universitiesLinked ?? 0) > 0 && (
+                  <Stat
+                    label="Existing universities linked"
+                    value={result.summary.universitiesLinked}
+                  />
+                )}
                 {result.summary.coursesImported !== undefined && (
                   <>
                     <Stat
@@ -1603,6 +1617,11 @@ export function UniversityImport({ onImported }: { onImported: () => void }) {
               <Button variant="outline" onClick={reset}>
                 Import another file
               </Button>
+              {(result?.courses?.length ?? 0) > 0 && (
+                <Button variant="outline" asChild>
+                  <a href="/explorer?mode=courses">View imported courses</a>
+                </Button>
+              )}
               <Button onClick={close}>Close</Button>
             </DialogFooter>
           )}

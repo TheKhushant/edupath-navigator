@@ -209,6 +209,9 @@ describe("custom fields and progress against a local MongoDB", { skip }, () => {
     const definition = await CustomFieldDefinition.findOne({ key: "scholarshipAmount" }).lean();
     assert.equal(definition.type, "number");
     assert.equal(definition.createdByImport, confirmed.body.data.importId);
+    const listed = await (await fetch(`${baseUrl}/universities/import/custom-fields`)).json();
+    assert.deepEqual(listed.data, [{ entity: "university", key: "scholarshipAmount", label: "Scholarship", type: "number" }]);
+
     const log = await ExcelImport.findOne({ importId: confirmed.body.data.importId }).lean();
     assert.equal(log.createdCustomFields[0].key, "scholarshipAmount");
 

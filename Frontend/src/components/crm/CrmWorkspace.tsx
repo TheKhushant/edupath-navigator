@@ -17,6 +17,14 @@ import {
 import { useDashboard, useNotifications, useStudents } from "@/hooks/useCrm";
 import { apiConfig } from "@/lib/api";
 import { UniversityImport } from "@/components/crm/UniversityImport";
+import { UniversityDetails } from "@/components/crm/UniversityDetails";
+import { ExternalLink } from "@/components/crm/ExternalLink";
+import {
+  BulkDeleteBar,
+  RowCheckbox,
+  SelectAllCheckbox,
+  useRowSelection,
+} from "@/components/crm/BulkSelection";
 import { UniversityExplorer } from "@/components/crm/UniversityExplorer";
 import {
   CourseDialog,
@@ -610,6 +618,8 @@ function StudentsModule() {
       ),
     [students, search, filter],
   );
+  const studentSelection = useRowSelection(filtered.map((student) => student.id));
+
   const addStudent = async () => {
     if (!name.trim()) return;
 
@@ -710,11 +720,32 @@ function StudentsModule() {
           "Visa",
         ]}
       />
+      <BulkDeleteBar
+        selection={studentSelection}
+        noun="students"
+        singular="student"
+        names={(ids) =>
+          ids.map((id) => {
+            const student = students.find((item) => item.id === id);
+            return student ? `${student.name} (${student.id})` : id;
+          })
+        }
+        note="Applications, documents and other records of these students are not deleted."
+        onDelete={async (ids) => {
+          const result = await studentService.bulkDeleteStudents(ids);
+          const removed = new Set([...result.deletedIds, ...result.notFound]);
+          setStudents((current) => current.filter((student) => !removed.has(student.id)));
+          return result;
+        }}
+      />
       <Card className="overflow-hidden shadow-none">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[760px] text-left text-sm">
             <thead className="bg-secondary/60 text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
+                <th className="w-10 py-3 pl-5">
+                  <SelectAllCheckbox selection={studentSelection} label="students" />
+                </th>
                 <th className="px-5 py-3 font-medium">Student</th>
                 <th className="px-5 py-3 font-medium">Service</th>
                 <th className="px-5 py-3 font-medium">Journey stage</th>
@@ -726,6 +757,13 @@ function StudentsModule() {
             <tbody className="divide-y divide-line/60">
               {filtered.map((student) => (
                 <tr key={student.id} className="transition-colors hover:bg-accent/40">
+                  <td className="w-10 py-3 pl-5">
+                    <RowCheckbox
+                      selection={studentSelection}
+                      id={student.id}
+                      label={student.name}
+                    />
+                  </td>
                   <td className="px-5 py-3">
                     <button
                       className="flex items-center gap-3 text-left"
@@ -1342,7 +1380,9 @@ const EDITABLE_PROGRAMME_FIELDS = [
 ] as const;
 
 function CoursesModule() {
-  const [view, setView] = useState<CourseView>("catalogue");
+  // Courses created with or imported for universities are university programmes
+  const [view, setView] = useState<CourseView>("programmes");
+  const [totals, setTotals] = useState<Partial<Record<CourseView, number>>>({});
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("All");
   const [page, setPage] = useState(1);
@@ -1390,6 +1430,25 @@ function CoursesModule() {
       cancelled = true;
     };
   }, [view, query, filter, page, reloadKey]);
+
+  // Record count of each tab, so no stored course is hidden behind the other tab
+  useEffect(() => {
+    let cancelled = false;
+    const params = { q: "", status: "All", page: 1, limit: 1 };
+
+    Promise.all([
+      courseService.searchCourses(params),
+      universityCourseService.searchUniversityCourses(params),
+    ])
+      .then(([catalogue, programmes]) => {
+        if (!cancelled) setTotals({ catalogue: catalogue.total, programmes: programmes.total });
+      })
+      .catch((countError) => console.error("Failed to count courses:", countError));
+
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
 
   const loadTagNames = async () => {
     if (tagNames.size || apiConfig.useMockData) return;
@@ -1469,6 +1528,18 @@ function CoursesModule() {
 
   const result = results?.result;
   const searchInfo = result?.search ?? null;
+
+  // Rows of the current tab and page; switching tab or page clears the selection
+  const pageRecords: { id: string; label: string }[] =
+    results?.view === "catalogue"
+      ? results.result.data.map((item) => ({ id: item.id, label: item.name }))
+      : results?.view === "programmes"
+        ? results.result.data.map((item) => ({
+            id: item.id,
+            label: [item.courseName, item.universityName].filter(Boolean).join(" · "),
+          }))
+        : [];
+  const courseSelection = useRowSelection(pageRecords.map((record) => record.id));
   const total = result?.total ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / COURSE_PAGE_SIZE));
   const firstRow = total ? (page - 1) * COURSE_PAGE_SIZE + 1 : 0;
@@ -1482,6 +1553,9 @@ function CoursesModule() {
             className="cursor-pointer hover:bg-accent/40"
             onClick={() => openDialog({ kind: "course", course: item, isNew: false })}
           >
+            <td className="w-10 py-3 pl-5">
+              <RowCheckbox selection={courseSelection} id={item.id} label={item.name} />
+            </td>
             <td className="px-5 py-3">
               <p className="font-medium">{item.name}</p>
               <p className="text-xs text-muted-foreground">
@@ -1502,8 +1576,18 @@ function CoursesModule() {
               className="cursor-pointer hover:bg-accent/40"
               onClick={() => openDialog({ kind: "programme", course: item, isNew: false })}
             >
+              <td className="w-10 py-3 pl-5">
+                <RowCheckbox selection={courseSelection} id={item.id} label={item.courseName} />
+              </td>
               <td className="px-5 py-3">
-                <p className="font-medium">{item.courseName}</p>
+                <p className="flex items-center gap-1 font-medium">
+                  {item.courseName}
+                  <ExternalLink
+                    href={item.programmeUrl || item.sourceUrl}
+                    iconOnly
+                    label={`Open course page of ${item.courseName}`}
+                  />
+                </p>
                 <p className="text-xs text-muted-foreground">
                   {[item.specialization, item.duration].filter(Boolean).join(" · ") || item.id}
                 </p>
@@ -1549,8 +1633,14 @@ function CoursesModule() {
 
       <Tabs value={view} onValueChange={changeView} className="mb-4">
         <TabsList>
-          <TabsTrigger value="catalogue">Course catalogue</TabsTrigger>
-          <TabsTrigger value="programmes">University programmes</TabsTrigger>
+          <TabsTrigger value="programmes">
+            University programmes
+            {totals.programmes !== undefined ? ` (${totals.programmes})` : ""}
+          </TabsTrigger>
+          <TabsTrigger value="catalogue">
+            Course catalogue
+            {totals.catalogue !== undefined ? ` (${totals.catalogue})` : ""}
+          </TabsTrigger>
         </TabsList>
       </Tabs>
 
@@ -1574,11 +1664,41 @@ function CoursesModule() {
         <SearchExpansionPanel search={searchInfo} total={total} onSearch={changeSearch} />
       )}
 
+      {!apiConfig.useMockData && (
+        <BulkDeleteBar
+          selection={courseSelection}
+          noun={view === "catalogue" ? "courses" : "programmes"}
+          singular={view === "catalogue" ? "course" : "programme"}
+          names={(ids) =>
+            ids.map((id) => pageRecords.find((record) => record.id === id)?.label ?? id)
+          }
+          note={
+            view === "programmes"
+              ? "Only the programmes are deleted; their universities stay."
+              : "University programmes are separate records and are not deleted."
+          }
+          onDelete={async (ids) => {
+            const deleted =
+              view === "catalogue"
+                ? await courseService.bulkDeleteCourses(ids)
+                : await universityCourseService.bulkDeleteUniversityCourses(ids);
+            setReloadKey((key) => key + 1);
+            return deleted;
+          }}
+        />
+      )}
+
       <Card className="overflow-hidden shadow-none">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[700px] text-left text-sm">
             <thead className="bg-secondary/60 text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
+                <th className="w-10 py-3 pl-5">
+                  <SelectAllCheckbox
+                    selection={courseSelection}
+                    label={view === "catalogue" ? "courses" : "programmes"}
+                  />
+                </th>
                 {headers.map((header) => (
                   <th key={header} className="px-5 py-3 font-medium">
                     {header}
@@ -1604,8 +1724,18 @@ function CoursesModule() {
               />
             ) : (
               <EmptyState
-                title="No records yet"
-                description="There are no records for this module in the database yet."
+                title={
+                  view === "catalogue" ? "No catalogue courses yet" : "No university programmes yet"
+                }
+                description={
+                  view === "catalogue" && totals.programmes
+                    ? `The catalogue is empty, but ${totals.programmes} course(s) linked to universities are under "University programmes".`
+                    : view === "programmes" && totals.catalogue
+                      ? `No programmes yet; ${totals.catalogue} course(s) are in the course catalogue.`
+                      : view === "programmes"
+                        ? "Add a programme, or import a course sheet from Universities → Upload Excel."
+                        : "Add a course to start the catalogue."
+                }
               />
             ))
           )}
@@ -1946,53 +2076,81 @@ function RecordsModule({
   }, [module]);
 
   const query = search.toLowerCase();
+
+  // Before the early returns below: hooks must run on every render
+  const visibleUniversities =
+    module === "universities"
+      ? universities.filter(
+          (item) =>
+            `${item.name} ${item.country} ${item.city}`.toLowerCase().includes(query) &&
+            (filter === "All" || item.country === filter),
+        )
+      : [];
+  const universitySelection = useRowSelection(visibleUniversities.map((item) => item.id));
+
   if (module === "assessment") return <AssessmentModule />;
   if (module === "reports") return <ReportsModule />;
   const rows =
     module === "universities"
-      ? universities
-          .filter(
-            (item) =>
-              `${item.name} ${item.country} ${item.city}`.toLowerCase().includes(query) &&
-              (filter === "All" || item.country === filter),
-          )
-          .map((item) => (
-            <tr key={item.id} className="hover:bg-accent/40">
-              <td className="px-5 py-3">
-                <p className="font-medium">{item.name}</p>
+      ? visibleUniversities.map((item) => (
+          <tr key={item.id} className="hover:bg-accent/40">
+            <td className="w-10 py-3 pl-5">
+              <RowCheckbox selection={universitySelection} id={item.id} label={item.name} />
+            </td>
+            <td className="px-5 py-3">
+              <p className="font-medium">{item.name}</p>
+
+              <p className="text-xs text-muted-foreground">
+                {item.id} · {item.city}
+              </p>
+            </td>
+
+            <td className="px-5 py-3 text-muted-foreground">{item.country}</td>
+
+            <td className="px-5 py-3">
+              <div>
+                {/* Course records first; the university's own "popular courses" list otherwise */}
+                <p className="font-medium">
+                  {item.courseNames?.length
+                    ? item.courseNames.join(", ") +
+                      ((item.courseCount ?? 0) > item.courseNames.length
+                        ? ` and ${(item.courseCount ?? 0) - item.courseNames.length} more`
+                        : "")
+                    : item.popularCourses?.length
+                      ? item.popularCourses.join(", ")
+                      : "No courses"}
+                </p>
+                {(item.courseCount ?? 0) > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {item.courseCount} course{item.courseCount === 1 ? "" : "s"} in the database
+                  </p>
+                )}
 
                 <p className="text-xs text-muted-foreground">
-                  {item.id} · {item.city}
+                  <ExternalLink
+                    href={item.website}
+                    label={`Open ${item.name} website`}
+                    fallback={item.website || "Website not available"}
+                  >
+                    {item.website}
+                  </ExternalLink>
                 </p>
-              </td>
+              </div>
+            </td>
 
-              <td className="px-5 py-3 text-muted-foreground">{item.country}</td>
+            <td className="px-5 py-3 text-muted-foreground">{item.ranking || "Not ranked"}</td>
 
-              <td className="px-5 py-3">
-                <div>
-                  <p className="font-medium">
-                    {item.popularCourses?.length ? item.popularCourses.join(", ") : "No courses"}
-                  </p>
+            <td className="px-5 py-3">
+              <StatusBadge>{item.difficulty || "Not specified"}</StatusBadge>
+            </td>
 
-                  <p className="text-xs text-muted-foreground">
-                    {item.website || "Website not available"}
-                  </p>
-                </div>
-              </td>
-
-              <td className="px-5 py-3 text-muted-foreground">{item.ranking || "Not ranked"}</td>
-
-              <td className="px-5 py-3">
-                <StatusBadge>{item.difficulty || "Not specified"}</StatusBadge>
-              </td>
-
-              <td className="px-5 py-3 text-right">
-                <Button variant="ghost" size="sm" onClick={() => openUniversity(item)}>
-                  View <ChevronRight />
-                </Button>
-              </td>
-            </tr>
-          ))
+            <td className="px-5 py-3 text-right">
+              <Button variant="ghost" size="sm" onClick={() => openUniversity(item)}>
+                View <ChevronRight />
+              </Button>
+            </td>
+          </tr>
+        ))
       : module === "applications"
         ? records.applications
             .filter(
@@ -2149,11 +2307,36 @@ function RecordsModule({
         setFilter={setFilter}
         filterOptions={config.filters}
       />
+      {module === "universities" && (
+        <BulkDeleteBar
+          selection={universitySelection}
+          noun="universities"
+          singular="university"
+          names={(ids) =>
+            ids.map((id) => {
+              const university = universities.find((item) => item.id === id);
+              return university ? `${university.name} (${university.id})` : id;
+            })
+          }
+          note="Courses and programmes linked to these universities are not deleted."
+          onDelete={async (ids) => {
+            const result = await universityService.bulkDeleteUniversities(ids);
+            const removed = new Set([...result.deletedIds, ...result.notFound]);
+            setUniversities((current) => current.filter((item) => !removed.has(item.id)));
+            return result;
+          }}
+        />
+      )}
       <Card className="overflow-hidden shadow-none">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[700px] text-left text-sm">
             <thead className="bg-secondary/60 text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
+                {module === "universities" && (
+                  <th className="w-10 py-3 pl-5">
+                    <SelectAllCheckbox selection={universitySelection} label="universities" />
+                  </th>
+                )}
                 {headers.map((header) => (
                   <th key={header} className="px-5 py-3 font-medium">
                     {header}
@@ -2450,7 +2633,7 @@ function RecordsModule({
           }
         }}
       >
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+        <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-4xl">
           {selectedUniversity && (
             <>
               <DialogHeader>
@@ -2461,109 +2644,7 @@ function RecordsModule({
                 </DialogDescription>
               </DialogHeader>
 
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-md border border-line/60 bg-secondary/40 p-3">
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                    Country
-                  </p>
-
-                  <p className="mt-1 text-sm font-medium">{selectedUniversity.country || "—"}</p>
-                </div>
-
-                <div className="rounded-md border border-line/60 bg-secondary/40 p-3">
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">City</p>
-
-                  <p className="mt-1 text-sm font-medium">{selectedUniversity.city || "—"}</p>
-                </div>
-
-                <div className="rounded-md border border-line/60 bg-secondary/40 p-3">
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                    Ranking
-                  </p>
-
-                  <p className="mt-1 text-sm font-medium">
-                    {selectedUniversity.ranking || "Not ranked"}
-                  </p>
-                </div>
-
-                <div className="rounded-md border border-line/60 bg-secondary/40 p-3">
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                    Difficulty
-                  </p>
-
-                  <p className="mt-1 text-sm font-medium">{selectedUniversity.difficulty || "—"}</p>
-                </div>
-
-                <div className="rounded-md border border-line/60 bg-secondary/40 p-3">
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                    English Requirement
-                  </p>
-
-                  <p className="mt-1 text-sm font-medium">
-                    {selectedUniversity.englishRequirement || "—"}
-                  </p>
-                </div>
-
-                <div className="rounded-md border border-line/60 bg-secondary/40 p-3">
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                    Indian Percentage
-                  </p>
-
-                  <p className="mt-1 text-sm font-medium">
-                    {selectedUniversity.recommendedIndianPercentage || "—"}
-                  </p>
-                </div>
-
-                <div className="rounded-md border border-line/60 bg-secondary/40 p-3">
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                    Application Opens
-                  </p>
-
-                  <p className="mt-1 text-sm font-medium">
-                    {selectedUniversity.applicationOpens || "—"}
-                  </p>
-                </div>
-
-                <div className="rounded-md border border-line/60 bg-secondary/40 p-3">
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                    Application Deadline
-                  </p>
-
-                  <p className="mt-1 text-sm font-medium">
-                    {selectedUniversity.applicationDeadline || "—"}
-                  </p>
-                </div>
-
-                <div className="rounded-md border border-line/60 bg-secondary/40 p-3 sm:col-span-2">
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                    Popular Courses
-                  </p>
-
-                  <p className="mt-1 text-sm font-medium">
-                    {selectedUniversity.popularCourses?.join(", ") || "No courses available"}
-                  </p>
-                </div>
-
-                <div className="rounded-md border border-line/60 bg-secondary/40 p-3 sm:col-span-2">
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                    Requirements
-                  </p>
-
-                  <p className="mt-1 text-sm font-medium">
-                    {selectedUniversity.requirements?.join(", ") || "No requirements available"}
-                  </p>
-                </div>
-
-                <div className="rounded-md border border-line/60 bg-secondary/40 p-3 sm:col-span-2">
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                    Website
-                  </p>
-
-                  <p className="mt-1 text-sm font-medium break-all">
-                    {selectedUniversity.website || "Not available"}
-                  </p>
-                </div>
-              </div>
+              <UniversityDetails university={selectedUniversity} />
 
               <DialogFooter>
                 <Button variant="destructive" onClick={() => deleteUniversity(selectedUniversity)}>

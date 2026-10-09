@@ -26,6 +26,7 @@ import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { ExternalLink } from "@/components/crm/ExternalLink";
 
 /* =========================================================
    Course search UI: which related tags a search used, why a
@@ -511,6 +512,17 @@ export function CourseDialog({
                 onChange={(event) => setForm({ ...form, notes: event.target.value })}
               />
             </label>
+          </div>
+        )}
+
+        {programme && (programmeForm.programmeUrl || programmeForm.sourceUrl) && (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border border-line/60 bg-secondary/30 px-3 py-2 text-sm">
+            <ExternalLink href={programmeForm.programmeUrl} label="Open course page">
+              Course page
+            </ExternalLink>
+            <ExternalLink href={programmeForm.sourceUrl} label="Open source page">
+              Source page
+            </ExternalLink>
           </div>
         )}
 

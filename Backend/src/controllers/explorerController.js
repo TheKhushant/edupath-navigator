@@ -458,16 +458,31 @@ const getFacets = async (req, res) => {
 };
 
 // GET /explorer/universities/:id -> university, its programmes and country admission info
+// ?include=source also returns the uploaded Excel rows (sourceRow) and extra
+// columns (extraFields) of the university and its programmes (Universities "View").
+const SOURCE_FIELDS = ["sourceRow", "extraFields"];
+
 const getUniversityDetails = async (req, res) => {
   try {
+    const withSource = req.query.include === "source";
+    const universityExclude = withSource
+      ? UNIVERSITY_EXCLUDE.filter((field) => !SOURCE_FIELDS.includes(field))
+      : UNIVERSITY_EXCLUDE;
+    const courseExclude = withSource
+      ? COURSE_EXCLUDE.filter((field) => !SOURCE_FIELDS.includes(field))
+      : COURSE_EXCLUDE;
+
     const university = await University.findOne(idsFilter([req.params.id]))
-      .select(UNIVERSITY_EXCLUDE.map((field) => `-${field}`).join(" "))
+      .select(universityExclude.map((field) => `-${field}`).join(" "))
       .lean();
     if (!university) throw new RequestError("University not found", 404);
 
     const [programmes, country] = await Promise.all([
-      UniversityCourse.find({ universityId: university._id })
-        .select(COURSE_EXCLUDE.map((field) => `-${field}`).join(" "))
+      // Linked by reference, or only by the readable university id (older / seeded records)
+      UniversityCourse.find({
+        $or: [{ universityId: university._id }, ...(university.id ? [{ universityExternalId: university.id }] : [])],
+      })
+        .select(courseExclude.map((field) => `-${field}`).join(" "))
         .sort({ courseName: 1 })
         .limit(500)
         .lean(),

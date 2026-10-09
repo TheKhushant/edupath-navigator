@@ -8,7 +8,8 @@
     "dev": "nodemon server.js",
     "seed": "tsx scripts/seed.js",
     "seed:search-tags": "node scripts/seedSearchTags.js",
-    "import:hochschulkompass": "node scripts/importHochschulkompass.js --create-universities"
+    "import:hochschulkompass": "node scripts/importHochschulkompass.js --create-universities",
+    "template:build": "node scripts/buildImportTemplate.js"
   },
   "keywords": [],
   "author": "",

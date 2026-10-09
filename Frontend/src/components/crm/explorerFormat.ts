@@ -1,4 +1,5 @@
 import type {
+  ExcelCustomFieldDefinition,
   ExplorerCourse,
   ExplorerCountryInfo,
   ExplorerUniversity,
@@ -26,9 +27,44 @@ export const joinFilled = (parts: unknown[], separator = " · ") =>
 export const listFilled = (values: unknown[] | undefined) =>
   (values ?? []).filter(filled).map(String);
 
-/** Only http(s) links are rendered as links. */
-export const safeUrl = (url: unknown) =>
-  typeof url === "string" && /^https?:\/\/\S+$/i.test(url.trim()) ? url.trim() : undefined;
+/**
+ * Stored URL -> safe absolute http(s) URL, or undefined.
+ * "www.tum.de" and "tum.de/path" get https://; other schemes (javascript:,
+ * data:, file:, ...), URLs with credentials and malformed values are refused.
+ */
+export function normalizeUrl(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+
+  let text = value.trim();
+  if (!text || text.length > 2048 || /\s/.test(text)) return undefined;
+
+  const hasScheme = /^[a-z][a-z0-9+.-]*:/i.test(text);
+  if (
+    !hasScheme &&
+    (/^www\./i.test(text) || /^[a-z0-9-]+(\.[a-z0-9-]+)+(:\d+)?([/?#]|$)/i.test(text))
+  ) {
+    text = `https://${text}`;
+  }
+
+  try {
+    const url = new URL(text);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
+    if (url.username || url.password) return undefined;
+    if (!url.hostname.includes(".") && url.hostname !== "localhost") return undefined;
+    return url.href;
+  } catch {
+    return undefined;
+  }
+}
+
+/** True when a text value is meant as a link (not e.g. a sentence mentioning a site). */
+export const looksLikeUrl = (value: unknown) =>
+  typeof value === "string" &&
+  /^(https?:\/\/|www\.)\S+$/i.test(value.trim()) &&
+  Boolean(normalizeUrl(value));
+
+/** Only safe http(s) links are rendered as links. */
+export const safeUrl = (url: unknown) => normalizeUrl(url);
 
 function formatAmount(value: number, currency: string) {
   try {
@@ -114,6 +150,16 @@ export function courseFacts(course: ExplorerCourse): Fact[] {
     fact("Application opens", course.applicationStartDate),
     fact("Deadline", course.applicationDeadline),
     fact("Tuition", courseTuition(course)),
+    // The written annual tuition note, when it says more than the amount above
+    fact(
+      "Annual tuition",
+      course.annualTuitionFee !== courseTuition(course) ? course.annualTuitionFee : undefined,
+    ),
+    fact(
+      "Tuition notes",
+      course.tuitionFee !== courseTuition(course) ? course.tuitionFee : undefined,
+    ),
+    fact("Category", course.category),
     fact("Application fee", course.applicationFee),
     fact("Application method", course.applicationMethod || university?.portal),
     fact("Admission", course.admissionMode),
@@ -122,9 +168,77 @@ export function courseFacts(course: ExplorerCourse): Fact[] {
     fact("GRE", course.gre),
     fact("Required degree", course.requiredDegree),
     fact("Minimum GPA", course.minimumGpa),
+    fact("Recommended Indian %", course.recommendedIndianPercentage),
+    fact("ECTS required", course.ectsRequired),
+    fact("German requirement", course.germanRequirement),
+    fact("APS", course.apsRequired),
+    fact("Work experience", course.workExperience),
+    fact("Backlogs allowed", course.backlogsAllowed),
+    fact("Gap allowed", course.gapAllowed),
     fact("Entrance exam", course.entranceExam),
     fact("Interview", course.interview),
   ]);
+}
+
+/** "tuitionWaiverOffered" -> "Tuition Waiver Offered" (when no saved label exists). */
+const labelFromKey = (key: string) =>
+  key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/^./, (letter) => letter.toUpperCase());
+
+function customValue(
+  value: unknown,
+  type?: ExcelCustomFieldDefinition["type"],
+): string | undefined {
+  if (value === null || value === undefined) return undefined;
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (Array.isArray(value)) return listFilled(value).join(", ") || undefined;
+  if (type === "date" || (typeof value === "string" && /^\d{4}-\d{2}-\d{2}T/.test(value))) {
+    const date = new Date(String(value));
+    if (!Number.isNaN(date.getTime())) {
+      return date.toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        timeZone: "UTC",
+      });
+    }
+  }
+  if (typeof value === "object") {
+    return (
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, item]) => filled(item))
+        .map(([key, item]) => `${key}: ${String(item)}`)
+        .join(" · ") || undefined
+    );
+  }
+  return filled(value) ? String(value) : undefined;
+}
+
+/**
+ * Facts for a record's customFields, labelled with the saved definitions
+ * of that entity (definition order), then any key without a definition.
+ */
+export function customFieldFacts(
+  values: Record<string, unknown> | undefined,
+  definitions: ExcelCustomFieldDefinition[],
+  entity: ExcelCustomFieldDefinition["entity"],
+): Fact[] {
+  if (!values) return [];
+
+  const known = definitions.filter((definition) => definition.entity === entity);
+  const keys = [
+    ...known.map((definition) => definition.key).filter((key) => key in values),
+    ...Object.keys(values).filter((key) => !known.some((definition) => definition.key === key)),
+  ];
+
+  return facts(
+    keys.map((key) => {
+      const definition = known.find((item) => item.key === key);
+      return fact(
+        definition?.label ?? labelFromKey(key),
+        customValue(values[key], definition?.type),
+      );
+    }),
+  );
 }
 
 export function universityFacts(university: ExplorerUniversity): Fact[] {

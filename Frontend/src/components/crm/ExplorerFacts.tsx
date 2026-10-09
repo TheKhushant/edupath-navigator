@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
-import type { Fact } from "@/components/crm/explorerFormat";
+import { looksLikeUrl, type Fact } from "@/components/crm/explorerFormat";
+import { ExternalLink } from "@/components/crm/ExternalLink";
 
 /** Label/value grid and bullet list used by the explorer details and the student presentation. */
 export function FactList({ items, className }: { items: Fact[]; className?: string }) {
@@ -15,7 +16,9 @@ export function FactList({ items, className }: { items: Fact[]; className?: stri
           <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             {item.label}
           </dt>
-          <dd className="mt-0.5 break-words text-sm font-medium">{item.value}</dd>
+          <dd className="mt-0.5 break-words text-sm font-medium">
+            {looksLikeUrl(item.value) ? <ExternalLink href={item.value} /> : item.value}
+          </dd>
         </div>
       ))}
     </dl>

@@ -74,6 +74,9 @@ const withoutBrackets = (text) => text.replace(/\([^)]*\)/g, " ").replace(/\s+/g
 // Values of an awarded degree ("Master of Science (MSc)") vs an applicant's previous degree ("B TECH")
 const AWARDED_DEGREE_RE = /\b(master|bachelor|doctor|diplom|magister)\b.*\b(of|in)\b|\((m|b|ph)\.?\s?[a-z]{1,5}\.?\)/i;
 
+// Short degree codes such as "MCA", "B TECH", "B.Sc", "MBA", "BE / BTech"
+const DEGREE_CODE_RE = /^[a-z][a-z.\s/&-]{0,14}$/i;
+
 // Standard columns. A header maps to a column automatically on an alias
 // match (high confidence), or on a spelling-corrected alias / keyword rule
 // (medium confidence). Fuzzy near-misses and headers with more than one
@@ -296,6 +299,8 @@ const COLUMNS = [
       "required degree", "previous degree", "prior degree", "eligible degree", "eligible degrees",
       "accepted degree", "accepted degrees", "qualifying degree", "bachelor degree required",
     ],
+    // Typical values, used when a second "Degree" column is read as this field
+    typicalValues: DEGREE_CODE_RE,
     description: "Previous degree the applicant needs, e.g. B.Tech, MCA.",
     example: "B TECH",
   },
@@ -695,30 +700,6 @@ const SHEET_PURPOSES = {
   empty: "Empty sheet",
 };
 
-// Template sheets (Instructions is generated separately)
-const TEMPLATE_SHEETS = [
-  {
-    name: "Universities",
-    type: "universities",
-    columns: [
-      "name",
-      "country",
-      "city",
-      "annualTuitionFee",
-      "englishRequirement",
-      "requirements",
-      "applicationOpens",
-      "applicationDeadline",
-      "popularCourses",
-      "recommendedIndianPercentage",
-      "website",
-    ],
-  },
-  { name: "Rankings", type: "rankings", columns: ["rank", "name", "rankingSource"] },
-  { name: "Websites", type: "websites", columns: ["name", "website"] },
-  { name: "Admission Difficulty", type: "admissionDifficulty", columns: ["name", "field", "level"] },
-];
-
 function levenshtein(a, b) {
   const previous = Array.from({ length: b.length + 1 }, (_, index) => index);
 
@@ -886,6 +867,10 @@ function resolveAmbiguous(keys, values, mappedKeys) {
 const MONTH_RE =
   /\b(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|june?|july?|aug(ust)?|sep(t(ember)?)?|oct(ober)?|nov(ember)?|dec(ember)?)\b/i;
 
+// Text saying the source has no information ("Not specified in the official programme source")
+const NOT_PROVIDED_RE =
+  /^(not\s+(specified|stated|available|listed|published|provided|mentioned|known|applicable)|n\/?a|none|unknown|tbd|tba|to be (announced|confirmed))\b|^[-—–]+$/i;
+
 const FLEXIBLE_DATE_RE =
   /\b(multiple|rolling|varies|various|open|intakes?|dates?|year[- ]round|continuous|tbd|tba)\b/i;
 
@@ -979,7 +964,7 @@ function validateDateText(text) {
       : { ok: false, severity: "ERROR", message: "Invalid date", suggestion: "Use DD/MM/YYYY with a real calendar date, or a month name such as \"December\"" };
   }
 
-  if (MONTH_RE.test(text) || FLEXIBLE_DATE_RE.test(text)) {
+  if (MONTH_RE.test(text) || FLEXIBLE_DATE_RE.test(text) || NOT_PROVIDED_RE.test(text)) {
     return { ok: true };
   }
 
@@ -1360,6 +1345,31 @@ async function analyzeWorkbook(buffer, options) {
     };
     const labelOf = (index) => sheetInfo.headers[index] || `Column ${index + 1}`;
 
+    /**
+     * Two columns with the same automatic field (e.g. two "Degree" columns):
+     * returns the field's usual second meaning for this column when the values
+     * leave no doubt - the other column holds the first meaning ("Master of
+     * Science (MSc)") and this one holds typical values of the second ("MCA",
+     * "B TECH"). Otherwise undefined, and the user decides in the preview.
+     */
+    const confidentAlternative = (index) => {
+      const key = autoKey(index);
+      const column = key && COLUMN_BY_KEY.get(key);
+      const alternative = column?.duplicateAlternative && COLUMN_BY_KEY.get(column.duplicateAlternative);
+      if (!column?.primaryValues || !alternative?.typicalValues) return undefined;
+
+      const others = sheetInfo.headers.map((_, other) => other).filter((other) => other !== index && autoKey(other) === key);
+      if (others.length !== 1 || !valuesByColumn[index].length) return undefined;
+
+      const share = (at, pattern) => shareMatching(valuesByColumn[at], (value) => pattern.test(value));
+      const clear =
+        share(others[0], column.primaryValues) >= 0.8 &&
+        share(index, column.primaryValues) <= 0.2 &&
+        share(index, alternative.typicalValues) >= 0.8;
+
+      return clear ? alternative.key : undefined;
+    };
+
     const columns = new Array(sheetInfo.headers.length);
 
     // 1. The user's choices
@@ -1372,9 +1382,24 @@ async function analyzeWorkbook(buffer, options) {
       // ambiguous header is resolved against the automatic fields of the other columns
       const otherAutoKeys = new Set(matches.map((_, other) => other !== index && autoKey(other)).filter(Boolean));
       const autoField =
+        confidentAlternative(index) ??
         autoKey(index) ??
         (matches[index]?.ambiguous ? resolveAmbiguous(matches[index].keys, valuesByColumn[index], otherAutoKeys)?.key : undefined);
-      const base = { index, header, selected: true, autoField, ...matchInfo(index) };
+      const alternativeKey = confidentAlternative(index);
+      const base = {
+        index,
+        header,
+        selected: true,
+        autoField,
+        ...matchInfo(index),
+        // Same explanation as the automatic scan gives for this column
+        ...(alternativeKey
+          ? {
+              confidence: "medium",
+              matchReason: `Second "${header}" column with short degree codes (e.g. ${valuesByColumn[index].slice(0, 2).join(", ")}), read as ${COLUMN_BY_KEY.get(alternativeKey).header}`,
+            }
+          : {}),
+      };
 
       if (!choice.include) {
         sheetInfo.excluded.add(index);
@@ -1469,6 +1494,21 @@ async function analyzeWorkbook(buffer, options) {
         if (swap) {
           sheetInfo.columnMap.set(key, primary);
           columns[primary] = mapped(primary);
+        }
+
+        if (confidentAlternative(secondary) === alternative.key) {
+          sheetInfo.columnMap.set(alternative.key, secondary);
+          columns[secondary] = {
+            index: secondary,
+            header: sheetInfo.headers[secondary],
+            status: "mapped",
+            mappedTo: alternative.key,
+            mappedHeader: alternative.header,
+            autoField: alternative.key,
+            confidence: "medium",
+            matchReason: `Second "${column.header}" column: "${labelOf(primary)}" holds degree names, this one short degree codes (e.g. ${valuesByColumn[secondary].slice(0, 2).join(", ")}), so it is read as ${alternative.header}`,
+          };
+          return;
         }
 
         columns[secondary] = {
@@ -3393,53 +3433,76 @@ async function executeImport(plan, { onProgress } = {}) {
 
 // ======================================================
 // TEMPLATE
+//
+// The downloadable template is the structure of a real import workbook:
+// its first worksheet's name, header row (same headers, same order) and
+// column widths, with no data rows and no other sheets.
+//
+// Source: EXCEL_TEMPLATE_FILE, default Backend/data/import-template.xlsx
+// (header-only copy of the team's Excel; regenerate it from a filled
+// workbook with `npm run template:build -- --from <file.xlsx>`).
 // ======================================================
 
-function buildTemplate() {
-  const workbook = XLSX.utils.book_new();
+const DEFAULT_TEMPLATE_FILE = path.join(__dirname, "..", "..", "data", "import-template.xlsx");
 
-  const instructions = [
-    ["EduPath Navigator - University Excel Import Template"],
-    [],
-    ["How to use"],
-    ["1. Fill the \"Universities\" sheet: one row per university. This sheet creates or updates universities."],
-    ["2. Optional sheets link extra data to universities by the University name (exact name, case and punctuation insensitive)."],
-    ["3. Related rows can link to universities in the same file or to universities that already exist in the system."],
-    ["4. Keep the column names unchanged. Extra columns are allowed and are preserved, but not mapped to university fields."],
-    ["5. Upload the file, review the scan and validation results, then confirm the import. Nothing is saved before you confirm."],
-    ["6. Leave cells empty when information is not available. Do not enter placeholder values."],
-    [],
-    ["Sheet", "Column", "Required", "Format / Rules", "Example"],
-    ...TEMPLATE_SHEETS.flatMap((sheet) =>
-      sheet.columns.map((key) => {
-        const column = COLUMN_BY_KEY.get(key);
-        const required =
-          key === "name" ||
-          (sheet.type === "rankings" && key === "rank") ||
-          (sheet.type === "websites" && key === "website") ||
-          (sheet.type === "admissionDifficulty" && (key === "field" || key === "level"))
-            ? "Yes"
-            : key === "country"
-              ? "Yes (or default country)"
-              : "No";
+const templateFile = () => process.env.EXCEL_TEMPLATE_FILE || DEFAULT_TEMPLATE_FILE;
 
-        return [sheet.name, column.header, required, column.description, column.example];
-      }),
-    ),
-  ];
+/** Sheet name, headers and column widths of a workbook's first sheet. */
+function templateStructure(workbook) {
+  const sheetName = workbook.SheetNames[0];
+  const sheet = sheetName && workbook.Sheets[sheetName];
+  if (!sheet || !sheet["!ref"]) throw new ImportError("The template workbook has no worksheet with headers.", 500);
 
-  const instructionsSheet = XLSX.utils.aoa_to_sheet(instructions);
-  instructionsSheet["!cols"] = [{ wch: 22 }, { wch: 28 }, { wch: 24 }, { wch: 80 }, { wch: 45 }];
-  XLSX.utils.book_append_sheet(workbook, instructionsSheet, "Instructions");
+  const range = XLSX.utils.decode_range(sheet["!ref"]);
 
-  for (const sheet of TEMPLATE_SHEETS) {
-    const headers = sheet.columns.map((key) => COLUMN_BY_KEY.get(key).header);
-    const worksheet = XLSX.utils.aoa_to_sheet([headers]);
-    worksheet["!cols"] = headers.map((header) => ({ wch: Math.max(18, header.length + 6) }));
-    XLSX.utils.book_append_sheet(workbook, worksheet, sheet.name);
+  // Header row = first row with a value
+  let headerRow = range.s.r;
+  const valueAt = (r, c) => sheet[XLSX.utils.encode_cell({ r, c })]?.v;
+  while (headerRow <= range.e.r && ![...Array(range.e.c - range.s.c + 1).keys()].some((c) => clean(valueAt(headerRow, range.s.c + c)))) {
+    headerRow++;
   }
 
+  // Header cells up to the last non-empty one; texts kept exactly (also duplicates such as two "Degree")
+  const headers = [];
+  for (let c = range.s.c; c <= range.e.c; c++) {
+    const value = valueAt(headerRow, c);
+    headers.push(value === undefined || value === null ? "" : String(value));
+  }
+  while (headers.length && !headers[headers.length - 1].trim()) headers.pop();
+  if (!headers.length) throw new ImportError("The template workbook has no header row.", 500);
+
+  const widths = headers.map((header, index) => {
+    const column = sheet["!cols"]?.[range.s.c + index];
+    const width = column?.wch ?? column?.width;
+    return Number.isFinite(width) && width > 0 ? width : Math.max(12, header.length + 4);
+  });
+
+  return { sheetName, headers, widths };
+}
+
+/** New workbook with only the header row, in one worksheet. */
+function writeTemplate({ sheetName, headers, widths }) {
+  const workbook = XLSX.utils.book_new();
+  const sheet = XLSX.utils.aoa_to_sheet([headers]);
+  sheet["!cols"] = widths.map((wch) => ({ wch }));
+  XLSX.utils.book_append_sheet(workbook, sheet, sheetName);
   return XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+}
+
+function buildTemplate() {
+  const file = templateFile();
+  let workbook;
+
+  try {
+    workbook = XLSX.readFile(file, { sheetRows: 20, cellStyles: true });
+  } catch (error) {
+    throw new ImportError(
+      `The Excel template file could not be read (${path.basename(file)}). Add it under Backend/data or set EXCEL_TEMPLATE_FILE. (${error.code || error.message})`,
+      500,
+    );
+  }
+
+  return writeTemplate(templateStructure(workbook));
 }
 
 module.exports = {
@@ -3448,6 +3511,8 @@ module.exports = {
   analyzeWorkbook,
   executeImport,
   buildTemplate,
+  templateStructure,
+  writeTemplate,
   // Exported for tests
   matchHeader,
   parseTuitionAmount,

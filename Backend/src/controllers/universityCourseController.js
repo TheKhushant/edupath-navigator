@@ -17,6 +17,30 @@ const FILTER_FIELDS = [
   "status",
 ];
 
+const plain = (doc) => (typeof doc?.toObject === "function" ? doc.toObject() : doc);
+
+/**
+ * Courses linked only by the university's readable id (universityExternalId,
+ * no universityId reference) get the university's name, so lists show the
+ * university instead of "Not linked".
+ */
+async function withUniversityNames(courses) {
+  const linkedByIdOnly = (course) =>
+    !course.universityName && !course.universityId?.name && course.universityExternalId;
+
+  const ids = [...new Set(courses.filter(linkedByIdOnly).map((course) => course.universityExternalId))];
+  if (!ids.length) return courses;
+
+  const universities = await University.find({ id: { $in: ids } }, { id: 1, name: 1 }).lean();
+  const nameById = new Map(universities.map((university) => [university.id, university.name]));
+
+  return courses.map((course) =>
+    linkedByIdOnly(course) && nameById.has(course.universityExternalId)
+      ? { ...plain(course), universityName: nameById.get(course.universityExternalId) }
+      : course,
+  );
+}
+
 // GET all university courses
 // ?q=      ranked search over programme name, specialization and university
 //          name, expanded with related search tags (see services/courseSearch.js)
@@ -36,7 +60,7 @@ const getUniversityCourses = async (req, res) => {
       total,
       page,
       limit,
-      data,
+      data: await withUniversityNames(data),
       search,
     });
   } catch (error) {
@@ -64,7 +88,7 @@ const getUniversityCourseById = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      data: course,
+      data: (await withUniversityNames([course]))[0],
     });
   } catch (error) {
     res.status(500).json({

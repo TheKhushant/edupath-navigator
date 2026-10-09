@@ -99,6 +99,19 @@ export function ColumnMappingTable({
   );
   const allIncluded = columns.every((column) => choices[column.index]?.include);
 
+  // A database field can be filled from one column only
+  const usedByField = new Map<string, { index: number; label: string }>();
+  for (const column of columns) {
+    const choice = choices[column.index];
+    if (!choice?.include || !choice.field || choice.field === EXTRA_FIELD) continue;
+    if (!usedByField.has(choice.field)) {
+      usedByField.set(choice.field, {
+        index: column.index,
+        label: columnLabel(column.header, column.index),
+      });
+    }
+  }
+
   const included = columns.filter((column) => choices[column.index]?.include);
   const unmatched = included.filter((column) => !choices[column.index]?.field).length;
   const toReview = included.filter(
@@ -153,11 +166,22 @@ export function ColumnMappingTable({
             {columns.map((column) => {
               const choice = choices[column.index] ?? { include: false, field: "" };
               const problem = problems.get(`${sheet.name}|${column.index}`);
+              // Name of another column that already uses this field
+              const takenBy = (key: string) => {
+                const owner = usedByField.get(key);
+                return owner && owner.index !== column.index ? owner.label : undefined;
+              };
+              const option = (key: string, text: string) => (
+                <option key={key} value={key} disabled={Boolean(takenBy(key))}>
+                  {takenBy(key) ? `${text} — used by "${takenBy(key)}"` : text}
+                </option>
+              );
               const options = (
                 column.candidates?.length ? column.candidates : [column.suggestionField]
               )
                 .map((key) => (key ? fieldByKey.get(key) : undefined))
-                .filter((field): field is ExcelImportField => Boolean(field));
+                .filter((field): field is ExcelImportField => Boolean(field))
+                .filter((field) => !takenBy(field.key));
 
               return (
                 <tr
@@ -209,43 +233,33 @@ export function ColumnMappingTable({
                       {usedHere.length > 0 ? (
                         <>
                           <optgroup label="Imported on this sheet">
-                            {usedHere.map((field) => (
-                              <option key={field.key} value={field.key}>
-                                {fieldLabel(field)}
-                              </option>
-                            ))}
+                            {usedHere.map((field) => option(field.key, fieldLabel(field)))}
                           </optgroup>
                           <optgroup label="Other sheet types">
-                            {others.map((field) => (
-                              <option key={field.key} value={field.key}>
-                                {fieldLabel(field)}
-                              </option>
-                            ))}
+                            {others.map((field) => option(field.key, fieldLabel(field)))}
                           </optgroup>
                         </>
                       ) : (
-                        dataFields.map((field) => (
-                          <option key={field.key} value={field.key}>
-                            {fieldLabel(field)}
-                          </option>
-                        ))
+                        dataFields.map((field) => option(field.key, fieldLabel(field)))
                       )}
                       {savedCustom.length > 0 && (
                         <optgroup label="Custom fields (saved by earlier imports)">
-                          {savedCustom.map((field) => (
-                            <option key={field.key} value={field.key}>
-                              {`${field.label} (${field.custom ? CUSTOM_TYPE_LABELS[field.custom.type] : ""}) → ${dbFieldFor(field, sheet.type)}`}
-                            </option>
-                          ))}
+                          {savedCustom.map((field) =>
+                            option(
+                              field.key,
+                              `${field.label} (${field.custom ? CUSTOM_TYPE_LABELS[field.custom.type] : ""}) → ${dbFieldFor(field, sheet.type)}`,
+                            ),
+                          )}
                         </optgroup>
                       )}
                       {newHere.length > 0 && (
                         <optgroup label="New columns (this import)">
-                          {newHere.map((column) => (
-                            <option key={column.id} value={customRef(column.key)}>
-                              {`${column.label || "(unnamed)"} (new, ${CUSTOM_TYPE_LABELS[column.type]})${column.create ? "" : " — not created"}`}
-                            </option>
-                          ))}
+                          {newHere.map((column) =>
+                            option(
+                              customRef(column.key),
+                              `${column.label || "(unnamed)"} (new, ${CUSTOM_TYPE_LABELS[column.type]})${column.create ? "" : " — not created"}`,
+                            ),
+                          )}
                         </optgroup>
                       )}
                       {extra && <option value={extra.key}>{fieldLabel(extra)}</option>}

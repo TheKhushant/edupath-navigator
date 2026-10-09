@@ -408,21 +408,28 @@ describe("university Excel import against a local MongoDB", { skip }, () => {
     assert.equal(byIndex(9).mappedTo, "annualTuitionFee");
     assert.equal(byIndex(16).mappedTo, "degree");
     assert.equal(byIndex(28).mappedTo, "popularCourses");
-    assert.equal(byIndex(30).status, "suggested");
-    assert.equal(byIndex(30).suggestionField, "requiredDegree");
+    // Second "Degree": the first holds degree names, this one short codes -> Required Degree
+    assert.equal(byIndex(30).status, "mapped");
+    assert.equal(byIndex(30).mappedTo, "requiredDegree");
+    assert.equal(byIndex(30).confidence, "medium", "shown as \"Auto-mapped, check\"");
     assert.deepEqual(byIndex(30).samples, ["B TECH"]);
-    assert.equal(sheet.columns.filter((column) => column.status === "mapped").length, 31);
+    assert.equal(sheet.columns.filter((column) => column.status === "mapped").length, 32);
     assert.ok(auto.fields.find((field) => field.key === "englishRequirement").dbFields.courses.endsWith("ielts"));
 
-    // Frontend defaults: the ambiguous column has no field yet -> blocked
-    const blocked = await scanAndImport(buffer, defaultsFrom(auto, "Programmes"));
-    assert.equal(blocked.preview.mappingErrors, 1);
-    assert.equal(blocked.preview.sheets[0].columns[30].suggestionField, "requiredDegree", "suggestion kept after the user scan");
-    assert.deepEqual(blocked.preview.sheets[0].columns[30].candidates, ["degree", "requiredDegree"]);
-    assert.equal(blocked.result.status, 400);
+    // Mapping both Degree columns to Degree is still refused
+    const duplicate = await scanAndImport(buffer, defaultsFrom(auto, "Programmes", { 30: { field: "degree" } }));
+    assert.equal(duplicate.preview.mappingErrors, 1);
+    assert.ok(duplicate.preview.issues.some((issue) => issue.code === "duplicate_mapping"));
+    assert.equal(duplicate.result.status, 400);
     assert.equal(await UniversityCourse.countDocuments(), 0);
 
-    const { preview, result } = await scanAndImport(buffer, defaultsFrom(auto, "Programmes", { 30: { field: "requiredDegree" } }));
+    // Frontend defaults are enough now: nothing to resolve by hand
+    const defaults = defaultsFrom(auto, "Programmes");
+    const resolved = defaults.sheets[0].columns.find((column) => column.index === 30);
+    assert.equal(resolved.field, "requiredDegree");
+    const { preview, result } = await scanAndImport(buffer, defaults);
+    assert.equal(preview.mappingErrors, 0);
+    assert.equal(preview.sheets[0].columns[30].confidence, "medium", "same explanation after the user scan");
     assert.equal(preview.summary.willCreate, 1, "one university for both rows");
     assert.equal(preview.summary.willCreateCourses, 2);
     assert.equal(result.status, 201, JSON.stringify(result.body));
@@ -492,6 +499,29 @@ describe("university Excel import against a local MongoDB", { skip }, () => {
     assert.equal(updated.gapAllowed, "2 years", "empty cells do not clear existing values");
   });
 
+  test("an unclear second Degree still needs a choice; \"not specified\" dates are not warnings", async () => {
+    const buffer = workbook({
+      Courses: [
+        ["University", "Country", "Course", "Degree", "Degree", "Application Opens", "Application Deadline"],
+        ["Omega Courses University", "Germany", "Robotics", "MSC", "MCA", "Not specified in the official programme source", "N/A"],
+        ["Omega Courses University", "Germany", "Optics", "MBA", "BTECH", "Not stated; published as a deadline", "-"],
+      ],
+    });
+
+    const auto = (await upload("preview", buffer)).body.data;
+    const second = auto.sheets[0].columns[4];
+    // Both columns hold short codes, so which one is which cannot be told safely
+    assert.equal(second.status, "suggested");
+    assert.deepEqual(second.candidates, ["degree", "requiredDegree"]);
+    assert.ok(!auto.issues.some((issue) => issue.code === "invalid_date"), "no-information text is not a date problem");
+
+    const { preview, result } = await scanAndImport(buffer, defaultsFrom(auto, "Courses"));
+    assert.equal(preview.mappingErrors, 1);
+    assert.equal(preview.sheets[0].columns[4].suggestionField, "requiredDegree", "suggestion kept after the user scan");
+    assert.deepEqual(preview.sheets[0].columns[4].candidates, ["degree", "requiredDegree"]);
+    assert.equal(result.status, 400);
+  });
+
   test("courses link to existing universities, report failed rows and keep extra columns", async () => {
     await University.create({ id: "UNI-LAMBDA", name: "Lambda University", country: "Germany", city: "Bonn" });
 
@@ -518,6 +548,8 @@ describe("university Excel import against a local MongoDB", { skip }, () => {
     assert.ok(preview.universities.some((university) => university.action === "link" && university.existingId === "UNI-LAMBDA"));
     assert.equal(result.status, 201, JSON.stringify(result.body));
 
+    assert.equal(result.body.data.summary.universitiesLinked, 1, "existing university reported as linked");
+    assert.equal(result.body.data.summary.coursesImported, 1);
     const failed = result.body.data.failedRows;
     assert.ok(failed.some((row) => row.row === 3 && /cannot be created without a country/.test(row.message)));
     assert.ok(failed.some((row) => row.row === 4 && /University name is missing/.test(row.message)));

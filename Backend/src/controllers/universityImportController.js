@@ -66,6 +66,7 @@ function splitSelections(req) {
 }
 
 const progress = require("../services/importProgress");
+const CustomFieldDefinition = require("../models/CustomFieldDefinition");
 
 const optionsFrom = (req) => ({
   fileName: String(req.query.fileName ?? ""),
@@ -101,6 +102,20 @@ const downloadTemplate = (req, res) => {
     res.status(200).send(buffer);
   } catch (error) {
     handleError(res, error, "Failed to create the Excel template");
+  }
+};
+
+// GET /api/universities/import/custom-fields
+// Saved custom field definitions, so the UI can label customFields values.
+const listCustomFields = async (req, res) => {
+  try {
+    const fields = await CustomFieldDefinition.find({}, { _id: 0, entity: 1, key: 1, label: 1, type: 1 })
+      .sort({ entity: 1, label: 1 })
+      .lean();
+
+    res.status(200).json({ success: true, data: fields });
+  } catch (error) {
+    handleError(res, error, "Failed to load custom fields");
   }
 };
 
@@ -181,6 +196,10 @@ const confirmImport = async (req, res) => {
           rowsScanned: preview.summary.rowsScanned,
           imported: result.created.length,
           updated: result.updated.length,
+          // Universities that already existed and received courses (not created again)
+          universitiesLinked: preview.universities.filter((university) =>
+            university.action === "link" || (university.action === "skip" && preview.courses?.some((course) => course.universityName === university.name)),
+          ).length,
           coursesImported: result.createdCourses.length,
           coursesUpdated: result.updatedCourses.length,
           importedRows: preview.importRowCount,
@@ -213,4 +232,5 @@ module.exports = {
   previewImport,
   confirmImport,
   importProgress,
+  listCustomFields,
 };
