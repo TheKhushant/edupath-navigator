@@ -685,6 +685,7 @@ export interface ExcelImportIssue {
 
 export type ExcelSheetType =
   | "universities"
+  | "courses"
   | "rankings"
   | "websites"
   | "admissionDifficulty"
@@ -695,10 +696,89 @@ export type ExcelSheetType =
 export interface ExcelColumnInfo {
   index: number;
   header: string;
-  status: "mapped" | "suggested" | "unexpected" | "duplicate" | "empty";
+  /**
+   * excluded: unchecked in the preview (not imported);
+   * unmapped: selected without a target field (blocks the import);
+   * unexpected: kept as additional info (extraFields).
+   */
+  status: "mapped" | "suggested" | "unexpected" | "duplicate" | "empty" | "excluded" | "unmapped";
   mappedTo?: string;
   mappedHeader?: string;
   suggestion?: string;
+  /** Field key of the suggestion above. */
+  suggestionField?: string;
+  /** Field the header maps to automatically (template alias). */
+  autoField?: string;
+  /** True when the column's mapping came from the user's selection. */
+  selected?: boolean;
+  /** How sure the automatic header match is (high: known name; medium: spelling/keywords; low: suggestion only). */
+  confidence?: ExcelMatchConfidence;
+  /** Why the header was (or was not) matched automatically. */
+  matchReason?: string;
+  /** Field keys a header with several possible meanings could have. */
+  candidates?: string[];
+  /** Up to 3 distinct values from the uploaded rows. */
+  samples?: string[];
+}
+
+export type ExcelMatchConfidence = "high" | "medium" | "low";
+
+/** Target field offered in the column mapping (backend IMPORT_FIELDS). */
+export interface ExcelImportField {
+  key: string;
+  label: string;
+  dbField: string;
+  /** Database field per sheet type (a course sheet writes to UniversityCourse). */
+  dbFields?: Partial<Record<ExcelSheetType, string>>;
+  description: string;
+  /** Sheet types that import this field. */
+  sheetTypes: ExcelSheetType[];
+  /** Set for user-defined fields (key "custom:<key>", stored in customFields.<key>). */
+  custom?: { entity: ExcelCustomFieldEntity; type: ExcelCustomFieldType; isNew: boolean };
+}
+
+export type ExcelCustomFieldEntity = "university" | "course";
+
+export type ExcelCustomFieldType = "string" | "number" | "boolean" | "date" | "array" | "object";
+
+/** A custom field definition (saved, or created by an import). */
+export interface ExcelCustomFieldDefinition {
+  entity: ExcelCustomFieldEntity;
+  key: string;
+  label: string;
+  type: ExcelCustomFieldType;
+}
+
+/** Server-side progress of a preview or import request. */
+export interface ExcelImportProgress {
+  step: "preview" | "import";
+  phase:
+    | "receiving"
+    | "reading"
+    | "scanning"
+    | "validating"
+    | "checking"
+    | "writing"
+    | "finishing"
+    | "done"
+    | "failed";
+  totalRows?: number;
+  processedRows?: number;
+  /** Non-blank rows found in the workbook (set once it has been read). */
+  rowsDetected?: number;
+  detail?: string;
+  done: boolean;
+  error?: string;
+}
+
+/** Include/exclude and target field per column, sent with preview and confirm. */
+export interface ExcelColumnSelections {
+  sheets: {
+    name: string;
+    columns: { index: number; include: boolean; field: string }[];
+  }[];
+  /** New custom fields to create (only those with "Create this field in the database"). */
+  customFields?: ExcelCustomFieldDefinition[];
 }
 
 export type ExcelRowStatus =
@@ -747,10 +827,20 @@ export interface ExcelImportSummary {
     duplicateInFile: number;
     invalid: number;
     linkedExistingOnly: number;
+    linkedByCourses?: number;
+  };
+  courses?: {
+    new: number;
+    alreadyExists: number;
+    duplicateInFile: number;
+    invalid: number;
   };
   willCreate: number;
   willUpdate: number;
   willSkip: number;
+  willCreateCourses?: number;
+  willUpdateCourses?: number;
+  willSkipCourses?: number;
   errors: number;
   warnings: number;
   infos: number;
@@ -762,10 +852,21 @@ export interface ExcelPlannedUniversity {
   name: string;
   country: string;
   city: string;
-  action: "create" | "update" | "skip";
+  /** link: existing university that courses in the file are added to (not changed itself). */
+  action: "create" | "update" | "skip" | "link";
   existingId?: string;
   sheet: string;
   rowNumber: number | null;
+}
+
+export interface ExcelPlannedCourse {
+  courseName: string;
+  degree: string;
+  universityName: string;
+  action: "create" | "update" | "skip";
+  existingId?: string;
+  sheet: string;
+  rowNumber: number;
 }
 
 export interface ExcelImportPreview {
@@ -782,11 +883,30 @@ export interface ExcelImportPreview {
   issues: ExcelImportIssue[];
   issuesTruncated: boolean;
   universities: ExcelPlannedUniversity[];
+  courses?: ExcelPlannedCourse[];
+  coursesTruncated?: boolean;
+  /** What the workbook holds, from its sheet structure. */
+  detected?: { universities: boolean; courses: boolean };
+  fields: ExcelImportField[];
+  /** Custom fields this import will create once confirmed. */
+  newCustomFields?: ExcelCustomFieldDefinition[];
+  customFieldTypes?: ExcelCustomFieldType[];
+  /** False when the server does not allow creating fields. */
+  customFieldCreation?: boolean;
+  hasColumnSelections: boolean;
+  /** Mapping errors (unmapped / duplicate / unused fields); import is blocked while > 0. */
+  mappingErrors: number;
 }
 
 export interface ExcelImportOptions {
   mode: ExcelImportMode;
   defaultCountry: string;
+  /** Column include/mapping choices; omitted = automatic mapping. */
+  selections?: ExcelColumnSelections | undefined;
+  /** Random id to poll the server-side progress with. */
+  progressId?: string | undefined;
+  /** Upload progress of the request body, 0-100. */
+  onUploadProgress?: ((percent: number) => void) | undefined;
 }
 
 export interface ExcelImportedUniversity {
@@ -806,6 +926,10 @@ export interface ExcelImportResult {
     rowsScanned: number;
     imported: number;
     updated: number;
+    coursesImported?: number;
+    coursesUpdated?: number;
+    /** Valid rows written (created or updated). */
+    importedRows?: number;
     skipped: number;
     duplicates: number;
     invalid: number;
@@ -814,6 +938,28 @@ export interface ExcelImportResult {
     warnings: number;
   };
   universities: ExcelImportedUniversity[];
+  courses?: ExcelImportedCourse[];
+  /** Custom fields created by this import. */
+  customFields?: ExcelCustomFieldDefinition[];
+  /** Rows not imported because of errors, with the reason and a suggested fix. */
+  failedRows?: ExcelFailedRow[];
+}
+
+export interface ExcelImportedCourse {
+  id: string;
+  courseName: string;
+  degree: string;
+  universityName: string;
+  action: "created" | "updated";
+}
+
+export interface ExcelFailedRow {
+  sheet: string;
+  row: number;
+  column: string;
+  message: string;
+  value: string;
+  suggestion: string;
 }
 
 /* =========================================================

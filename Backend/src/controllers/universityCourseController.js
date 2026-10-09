@@ -105,10 +105,22 @@ async function withUniversityLink(body) {
   };
 }
 
+// customFields are written only by the Excel import, which validates them
+// against their CustomFieldDefinition; the plain CRUD body cannot set them.
+const withoutCustomFields = (body = {}) =>
+  Object.fromEntries(
+    Object.entries(body ?? {})
+      .filter(([key]) => key !== "customFields" && !key.startsWith("customFields."))
+      // Also inside update operators such as $set / $unset
+      .map(([key, value]) =>
+        key.startsWith("$") && value && typeof value === "object" ? [key, withoutCustomFields(value)] : [key, value],
+      ),
+  );
+
 // CREATE university course
 const createUniversityCourse = async (req, res) => {
   try {
-    const course = await UniversityCourse.create(await withUniversityLink(req.body));
+    const course = await UniversityCourse.create(await withUniversityLink(withoutCustomFields(req.body)));
 
     res.status(201).json({
       success: true,
@@ -129,7 +141,7 @@ const updateUniversityCourse = async (req, res) => {
   try {
     const course = await UniversityCourse.findOneAndUpdate(
       idFilter(req.params.id),
-      await withUniversityLink(req.body),
+      await withUniversityLink(withoutCustomFields(req.body)),
       {
         new: true,
         runValidators: true,

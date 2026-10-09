@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const { searchablePlugin } = require("../services/courseSearch");
+const { isValidCustomFields } = require("../services/customFields");
 
 const universitySchema = new mongoose.Schema(
   {
@@ -271,6 +272,17 @@ const universitySchema = new mongoose.Schema(
     sourceRecordId: {
       type: String,
       trim: true,
+    },
+
+    // Fields added by users during an Excel import (not core university fields).
+    // Validated object: keys are CustomFieldDefinition keys (see services/customFields.js).
+    customFields: {
+      type: mongoose.Schema.Types.Mixed,
+      default: undefined,
+      validate: {
+        validator: isValidCustomFields,
+        message: "customFields must be an object of simple values with camelCase keys",
+      },
     },
 
     // e.g. "Universität", "Fachhochschule / HAW", "Kunst- und Musikhochschule"

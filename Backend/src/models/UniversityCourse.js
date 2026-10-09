@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const { searchablePlugin } = require("../services/courseSearch");
+const { isValidCustomFields } = require("../services/customFields");
 
 const universityCourseSchema = new mongoose.Schema(
   {
@@ -258,6 +259,63 @@ const universityCourseSchema = new mongoose.Schema(
       trim: true,
     },
 
+    // ---------- Programme details from the University Excel import ----------
+
+    // Annual tuition as written in the source (tuitionFee is the general fee note);
+    // tuitionMin / tuitionMax hold the parsed EUR amount when there is one.
+    annualTuitionFee: {
+      type: String,
+      trim: true,
+    },
+
+    // Programme category as given by the source (subjectArea is the course category)
+    category: {
+      type: String,
+      trim: true,
+    },
+
+    germanRequirement: {
+      type: String,
+      trim: true,
+    },
+
+    // Credits the applicant's previous degree must have (ects is the programme's own total)
+    ectsRequired: {
+      type: String,
+      trim: true,
+    },
+
+    workExperience: {
+      type: String,
+      trim: true,
+    },
+
+    backlogsAllowed: {
+      type: String,
+      trim: true,
+    },
+
+    apsRequired: {
+      type: String,
+      trim: true,
+    },
+
+    gapAllowed: {
+      type: String,
+      trim: true,
+    },
+
+    recommendedIndianPercentage: {
+      type: String,
+      trim: true,
+    },
+
+    // Core modules / major subjects of the programme
+    majorCourses: {
+      type: [String],
+      default: undefined,
+    },
+
     importId: {
       type: String,
       trim: true,
@@ -269,6 +327,22 @@ const universityCourseSchema = new mongoose.Schema(
 
     // Original source record exactly as it was imported
     sourceRow: {
+      type: mongoose.Schema.Types.Mixed,
+    },
+
+    // Fields added by users during an Excel import (not core course fields).
+    // Validated object: keys are CustomFieldDefinition keys (see services/customFields.js).
+    customFields: {
+      type: mongoose.Schema.Types.Mixed,
+      default: undefined,
+      validate: {
+        validator: isValidCustomFields,
+        message: "customFields must be an object of simple values with camelCase keys",
+      },
+    },
+
+    // Uploaded columns kept as additional information (not mapped to a field)
+    extraFields: {
       type: mongoose.Schema.Types.Mixed,
     },
   },

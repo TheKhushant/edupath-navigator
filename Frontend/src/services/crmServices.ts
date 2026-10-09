@@ -16,6 +16,7 @@ import {
   mockUniversityCourses,
 } from "@/data/mockData";
 import type {
+  ExcelImportProgress,
   ExcelImportOptions,
   ExcelImportPreview,
   ExcelImportResult,
@@ -130,20 +131,90 @@ export const universityService = {
   },
 };
 
-/* The workbook is sent as the raw request body; options go in the query string. */
-const importQuery = (file: File, options: ExcelImportOptions, extra: Record<string, string> = {}) =>
-  new URLSearchParams({
+/*
+ * The workbook is sent as the raw request body; options go in the query string.
+ * Column selections (if any) are UTF-8 JSON placed in front of the workbook,
+ * with their byte length in ?selectionsLength (see universityImportController).
+ */
+const importRequest = (
+  file: File,
+  options: ExcelImportOptions,
+  extra: Record<string, string> = {},
+): { query: string; body: Blob | File } => {
+  const params = new URLSearchParams({
     fileName: file.name,
     mode: options.mode,
     defaultCountry: options.defaultCountry,
+    ...(options.progressId ? { progressId: options.progressId } : {}),
     ...extra,
-  }).toString();
+  });
+
+  if (!options.selections) return { query: params.toString(), body: file };
+
+  const json = new TextEncoder().encode(JSON.stringify(options.selections));
+  params.set("selectionsLength", String(json.byteLength));
+
+  return { query: params.toString(), body: new Blob([json, file]) };
+};
 
 const requireBackend = () => {
   if (apiConfig.useMockData) {
     throw new Error("Excel import needs the backend. Set VITE_USE_MOCK_DATA=false.");
   }
 };
+
+/**
+ * POST with upload progress (fetch cannot report it). Same JSON error
+ * handling as apiRequest.
+ */
+const postWithUploadProgress = <T>(
+  path: string,
+  body: Blob | File,
+  onUploadProgress: (percent: number) => void,
+): Promise<T> =>
+  new Promise((resolve, reject) => {
+    const request = new XMLHttpRequest();
+    request.open("POST", `${apiConfig.baseUrl}${path}`);
+    request.setRequestHeader("Content-Type", "application/octet-stream");
+
+    request.upload.onprogress = (event) => {
+      if (event.lengthComputable && event.total > 0) {
+        onUploadProgress(Math.round((event.loaded / event.total) * 100));
+      }
+    };
+
+    request.onload = () => {
+      let data: { message?: string; error?: string } | null = null;
+      try {
+        data = JSON.parse(request.responseText);
+      } catch {
+        data = null;
+      }
+
+      if (request.status >= 200 && request.status < 300) {
+        resolve(data as T);
+      } else {
+        reject(
+          new Error(data?.message || data?.error || `Request failed with status ${request.status}`),
+        );
+      }
+    };
+
+    // Small bodies may not fire progress events; the upload has finished here
+    request.upload.onload = () => onUploadProgress(100);
+
+    request.onerror = () => reject(new Error("Network error: the server could not be reached."));
+    request.send(body);
+  });
+
+const postImport = <T>(path: string, body: Blob | File, options: ExcelImportOptions) =>
+  options.onUploadProgress
+    ? postWithUploadProgress<T>(path, body, options.onUploadProgress)
+    : apiRequest<T>(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/octet-stream" },
+        body,
+      });
 
 export const universityImportService = {
   downloadTemplate: async (): Promise<Blob> => {
@@ -155,35 +226,52 @@ export const universityImportService = {
   previewImport: async (file: File, options: ExcelImportOptions): Promise<ExcelImportPreview> => {
     requireBackend();
 
-    const response = await apiRequest<{ success: boolean; data: ExcelImportPreview }>(
-      `/universities/import/preview?${importQuery(file, options)}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/octet-stream" },
-        body: file,
-      },
+    const { query, body } = importRequest(file, options);
+    const response = await postImport<{ success: boolean; data: ExcelImportPreview }>(
+      `/universities/import/preview?${query}`,
+      body,
+      options,
     );
 
     return response.data;
   },
 
+  /** Server-side progress of a running preview/import, or null when unknown. */
+  getProgress: async (progressId: string): Promise<ExcelImportProgress | null> => {
+    // Plain fetch: "not started yet" (404) is expected and is not logged as an API error
+    try {
+      const response = await fetch(
+        `${apiConfig.baseUrl}/universities/import/progress/${encodeURIComponent(progressId)}`,
+      );
+      if (!response.ok) return null;
+      const body = (await response.json()) as { data?: ExcelImportProgress };
+      return body.data ?? null;
+    } catch {
+      return null;
+    }
+  },
+
   /** Re-validates the same file on the server and imports the valid rows. */
   confirmImport: async (
     file: File,
-    options: ExcelImportOptions & { expectedHash: string; confirmOverwrite: boolean },
+    options: ExcelImportOptions & {
+      expectedHash: string;
+      confirmOverwrite: boolean;
+      /** Required when the import creates new custom fields. */
+      confirmCustomFields?: boolean;
+    },
   ): Promise<ExcelImportResult> => {
     requireBackend();
 
-    const response = await apiRequest<{ success: boolean; data: ExcelImportResult }>(
-      `/universities/import/confirm?${importQuery(file, options, {
-        expectedHash: options.expectedHash,
-        confirmOverwrite: String(options.confirmOverwrite),
-      })}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/octet-stream" },
-        body: file,
-      },
+    const { query, body } = importRequest(file, options, {
+      expectedHash: options.expectedHash,
+      confirmOverwrite: String(options.confirmOverwrite),
+      confirmCustomFields: String(options.confirmCustomFields ?? false),
+    });
+    const response = await postImport<{ success: boolean; data: ExcelImportResult }>(
+      `/universities/import/confirm?${query}`,
+      body,
+      options,
     );
 
     return response.data;
