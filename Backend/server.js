@@ -1,5 +1,11 @@
 require("dotenv").config();
 
+if (process.env.DNS_SERVERS) {
+  require("dns").setServers(
+    process.env.DNS_SERVERS.split(",").map((s) => s.trim()).filter(Boolean)
+  );
+}
+
 const app = require("./src/app");
 const connectDB = require("./src/config/db");
 

@@ -126,7 +126,10 @@ export const parseStudentPercentage = (value: unknown): number | undefined => {
 export const parseBudgetEur = (value: unknown): number | undefined => {
   const text = clean(value);
 
-  if (!/€|\beur\b|\beuros?\b/i.test(text)) return undefined;
+  const looksLikeEur =
+    /€|\beur\b|\beuros?\b/i.test(text) || /^\d[\d\s,.]*$/.test(text);
+
+  if (!looksLikeEur) return undefined;
 
   const number = extractNumbers(text)[0];
   if (number === undefined) return undefined;
@@ -275,9 +278,14 @@ export const matchUniversities = (
     const applicationDeadline =
       clean(university.applicationDeadline) || clean(sheet2["Application Deadline"]);
 
-    const courses = university.popularCourses?.length
-      ? university.popularCourses.map(clean).filter(Boolean)
-      : clean(sheet2["Major Courses"]).split(",").map(clean).filter(Boolean);
+    const courses = [
+      ...(university.popularCourses ?? []),
+      ...(university.courseNames ?? []),
+      ...clean(sheet2["Major Courses"]).split(","),
+    ]
+      .map(clean)
+      .filter(Boolean)
+      .filter((course, index, list) => list.findIndex((item) => item.toLowerCase() === course.toLowerCase()) === index);
 
     const requirements = university.requirements?.length
       ? university.requirements.map(clean).filter(Boolean)
@@ -287,19 +295,9 @@ export const matchUniversities = (
     const warnings: string[] = [];
     const missingRequirements: string[] = [];
 
-    // ---------------- COUNTRY ----------------
+    // ---------------- COUNTRY / COURSE / BUDGET (hard filters) ----------------
 
     const countryMatched = Boolean(country) && preferredCountries.includes(normalizeText(country));
-
-    if (countryMatched) {
-      matchedCriteria.push(`Preferred country: ${country}`);
-    } else if (preferredCountries.length > 0) {
-      warnings.push(`${country || "Country"} is not in the student's preferred countries`);
-    } else {
-      warnings.push("Student has no preferred countries recorded");
-    }
-
-    // ---------------- COURSE ----------------
 
     const matchedCourses = courses.filter((course) => {
       const normalizedCourse = normalizeCourse(course);
@@ -310,21 +308,27 @@ export const matchUniversities = (
     });
 
     const courseMatched = matchedCourses.length > 0;
+    const tuition = getTuitionRange(university, annualTuitionFee);
+    const tuitionFit = getTuitionFit(budgetEur, tuition.min, tuition.max);
 
-    // Only list universities that fit the student's subject. When the student
-    // has no course recorded, fall back to listing preferred-country universities.
-    if (studentPhrases.length > 0 ? !courseMatched : !countryMatched) return;
+    if (preferredCountries.length > 0 && !countryMatched) return;
+    if (studentPhrases.length > 0 && !courseMatched) return;
+    if (budgetEur !== undefined && tuitionFit === "Above Budget") return;
+    if (preferredCountries.length === 0 && studentPhrases.length === 0 && budgetEur === undefined) {
+      return;
+    }
+
+    if (countryMatched) {
+      matchedCriteria.push(`Preferred country: ${country}`);
+    } else {
+      warnings.push("Student has no preferred countries recorded");
+    }
 
     if (courseMatched) {
       matchedCriteria.push(`Course match: ${matchedCourses.join(", ")}`);
     } else {
       warnings.push("Student has no desired course or specialization recorded");
     }
-
-    // ---------------- BUDGET ----------------
-
-    const tuition = getTuitionRange(university, annualTuitionFee);
-    const tuitionFit = getTuitionFit(budgetEur, tuition.min, tuition.max);
 
     if (tuition.max === undefined) {
       warnings.push("Annual tuition fee is not available");
@@ -338,8 +342,6 @@ export const matchUniversities = (
       matchedCriteria.push("Annual tuition is within budget");
     } else if (tuitionFit === "Near Budget") {
       warnings.push("Upper end of annual tuition exceeds budget");
-    } else {
-      warnings.push("Annual tuition exceeds budget");
     }
 
     // ---------------- COUNTRY-LEVEL DATA ----------------
