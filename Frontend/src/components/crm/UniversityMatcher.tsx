@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
   ArrowLeft,
   CalendarDays,
   CheckCircle2,
+  ChevronDown,
   Clock3,
   ExternalLink,
   GraduationCap,
@@ -28,10 +29,12 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 
-import { countryService, studentService, universityService } from "@/services/crmServices";
+import { countryService, courseService, studentService, universityService } from "@/services/crmServices";
+import { Checkbox } from "@/components/ui/checkbox";
 import { isSheet2HeaderRow, matchUniversities } from "@/services/universityMatcher";
 import type {
   Country,
+  Course,
   LivingBudget,
   MatchStatus,
   Student,
@@ -120,12 +123,119 @@ function profileFromStudent(student?: Student) {
   };
 }
 
+function uniqueLabels(values: Array<string | undefined | null>) {
+  const labels = new Map<string, string>();
+
+  for (const value of values) {
+    const label = value?.trim();
+    if (!label) continue;
+    const key = label.toLowerCase();
+    if (!labels.has(key)) labels.set(key, label);
+  }
+
+  return [...labels.values()].sort((a, b) => a.localeCompare(b));
+}
+
+function coursesOnUniversity(university: University) {
+  const fromPopular = university.popularCourses ?? [];
+  const fromLinked = university.courseNames ?? [];
+  const fromSheet = (university.sheet2Data?.["Major Courses"] ?? "")
+    .split(",")
+    .map((course) => course.trim());
+
+  return [...fromPopular, ...fromLinked, ...fromSheet];
+}
+
+function splitCountries(value: string) {
+  return value
+    .split(",")
+    .map((country) => country.trim())
+    .filter(Boolean);
+}
+
+function CountryDropdown({
+  options,
+  selected,
+  disabled,
+  onChange,
+}: {
+  options: string[];
+  selected: string[];
+  disabled?: boolean;
+  onChange: (countries: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const selectedSet = new Set(selected.map((country) => country.toLowerCase()));
+
+  useEffect(() => {
+    if (!open) return;
+
+    const onPointerDown = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [open]);
+
+  const label =
+    selected.length === 0
+      ? "Select countries"
+      : selected.length === 1
+        ? selected[0]
+        : `${selected.length} countries selected`;
+
+  return (
+    <div className="relative" ref={rootRef}>
+      <button
+        type="button"
+        disabled={disabled || options.length === 0}
+        onClick={() => setOpen((current) => !current)}
+        className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-background px-3 text-left text-sm outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <span className={selected.length === 0 ? "text-muted-foreground" : "truncate text-foreground"}>
+          {options.length === 0 ? "No countries available" : label}
+        </span>
+        <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
+      </button>
+
+      {open && (
+        <div className="absolute z-50 mt-1 max-h-56 w-full overflow-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
+          {options.map((country) => {
+            const checked = selectedSet.has(country.toLowerCase());
+
+            return (
+              <label
+                key={country}
+                className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
+              >
+                <Checkbox
+                  checked={checked}
+                  onCheckedChange={(value) => {
+                    const next = value === true
+                      ? uniqueLabels([...selected, country])
+                      : selected.filter((item) => item.toLowerCase() !== country.toLowerCase());
+                    onChange(next);
+                  }}
+                />
+                <span>{country}</span>
+              </label>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function UniversityMatcher() {
   const navigate = useNavigate();
 
   const [students, setStudents] = useState<Student[]>([]);
   const [universities, setUniversities] = useState<University[]>([]);
   const [countries, setCountries] = useState<Country[]>([]);
+  const [catalogueCourses, setCatalogueCourses] = useState<Course[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -144,15 +254,17 @@ export function UniversityMatcher() {
     setLoadError(null);
 
     try {
-      const [studentData, universityData, countryData] = await Promise.all([
+      const [studentData, universityData, countryData, courseData] = await Promise.all([
         studentService.getStudents(),
         universityService.getUniversities(),
         countryService.getCountries(),
+        courseService.getCourses().catch(() => [] as Course[]),
       ]);
 
       setStudents(studentData);
       setUniversities(universityData);
       setCountries(countryData);
+      setCatalogueCourses(courseData);
 
       const firstStudent = studentData[0];
       setSelectedStudentId((current) =>
@@ -180,6 +292,32 @@ export function UniversityMatcher() {
     [universities],
   );
 
+  const courseOptions = useMemo(() => {
+    const fromUniversities = universities.flatMap((university) =>
+      isSheet2HeaderRow(university) ? [] : coursesOnUniversity(university),
+    );
+    const fromCatalogue = catalogueCourses.map((course) => course.name);
+
+    return uniqueLabels([
+      ...fromUniversities,
+      ...fromCatalogue,
+      editableProfile.desiredCourse,
+    ]);
+  }, [universities, catalogueCourses, editableProfile.desiredCourse]);
+
+  const countryOptions = useMemo(() => {
+    const fromUniversities = universities.flatMap((university) =>
+      isSheet2HeaderRow(university) ? [] : [university.country],
+    );
+    const fromCatalogue = countries.map((country) => country.country);
+
+    return uniqueLabels([
+      ...fromUniversities,
+      ...fromCatalogue,
+      ...splitCountries(editableProfile.preferredCountries),
+    ]);
+  }, [universities, countries, editableProfile.preferredCountries]);
+
   const selectedStudent = useMemo<Student | undefined>(() => {
     const student = students.find((student) => student.id === selectedStudentId);
 
@@ -188,10 +326,7 @@ export function UniversityMatcher() {
     return {
       ...student,
       desiredCourse: editableProfile.desiredCourse,
-      preferredCountries: editableProfile.preferredCountries
-        .split(",")
-        .map((country) => country.trim())
-        .filter(Boolean),
+      preferredCountries: splitCountries(editableProfile.preferredCountries),
       budget: editableProfile.budget,
     };
   }, [students, selectedStudentId, editableProfile]);
@@ -450,20 +585,31 @@ export function UniversityMatcher() {
                   Desired Course
                 </label>
 
-                <Input
+                <select
                   value={editableProfile.desiredCourse}
+                  disabled={isLoading || courseOptions.length === 0}
                   onChange={(event) => {
                     setEditableProfile((current) => ({
                       ...current,
                       desiredCourse: event.target.value,
                     }));
-
                     setIsProfileEditing(true);
                   }}
-                  placeholder="e.g. Computer Science"
-                  onKeyDown={handleSearchOnEnter}
-                  className="h-9"
-                />
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value="">
+                    {isLoading
+                      ? "Loading courses..."
+                      : courseOptions.length === 0
+                        ? "No courses available"
+                        : "Select a course"}
+                  </option>
+                  {courseOptions.map((course) => (
+                    <option key={course} value={course}>
+                      {course}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {/* Preferred Countries */}
@@ -472,24 +618,18 @@ export function UniversityMatcher() {
                   Preferred Countries
                 </label>
 
-                <Input
-                  value={editableProfile.preferredCountries}
-                  onChange={(event) => {
+                <CountryDropdown
+                  options={countryOptions}
+                  selected={splitCountries(editableProfile.preferredCountries)}
+                  disabled={isLoading}
+                  onChange={(next) => {
                     setEditableProfile((current) => ({
                       ...current,
-                      preferredCountries: event.target.value,
+                      preferredCountries: next.join(", "),
                     }));
-
                     setIsProfileEditing(true);
                   }}
-                  placeholder="Germany"
-                  onKeyDown={handleSearchOnEnter}
-                  className="h-9"
                 />
-
-                <p className="mt-1 text-[10px] text-muted-foreground">
-                  Separate countries with commas
-                </p>
               </div>
 
               {/* Budget */}
